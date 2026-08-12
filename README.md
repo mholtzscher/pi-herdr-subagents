@@ -16,7 +16,7 @@ Ask Parent Pi to call `spawn_pi` with independent tasks. Each task defaults to i
 
 ### Child roles and runtime defaults
 
-Optionally create `~/.pi/agent/herdr-subagents.json`:
+Optionally copy [`herdr-subagents.example.json`](./herdr-subagents.example.json) to `~/.pi/agent/herdr-subagents.json` and customize it:
 
 ```json
 {

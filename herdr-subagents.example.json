@@ -1,0 +1,16 @@
+{
+  "roles": {
+    "explore": {
+      "description": "Read-oriented repository exploration",
+      "prompt": "You are a repository explorer. Map the relevant code and report evidence. Do not edit files unless explicitly asked.",
+      "model": "openai-codex/gpt-5.6-luna",
+      "thinking": "low"
+    },
+    "reviewer": {
+      "description": "Focused implementation review",
+      "prompt": "You are a code reviewer. Inspect the requested changes for correctness, regressions, and missing verification. Do not edit files unless explicitly asked. Report findings with file and line references where possible.",
+      "model": "openai-codex/gpt-5.6-sol",
+      "thinking": "xhigh"
+    }
+  }
+}
