@@ -9,6 +9,7 @@ import {
   taskIdFor,
   validateSpawnBatchRequest,
 } from "./domain.js";
+import { emptyChildRolesConfig, resolveChildRuntime, type ModelRoutingContext } from "./model-routing.js";
 import { StartChildError, type ChildHost } from "./herdr/host.js";
 import type { ChildResultReader } from "./results.js";
 
@@ -16,6 +17,7 @@ export interface BatchRunner {
   run(
     request: SpawnBatchRequest,
     context: ParentContext,
+    routing: ModelRoutingContext,
     options?: { signal?: AbortSignal; onProgress?: (progress: BatchProgress) => void },
   ): Promise<SpawnBatchResult>;
 }
@@ -26,6 +28,7 @@ export class ConcurrentBatchRunner implements BatchRunner {
   async run(
     request: SpawnBatchRequest,
     context: ParentContext,
+    routing: ModelRoutingContext = { config: emptyChildRolesConfig(), availableModels: [] },
     options: { signal?: AbortSignal; onProgress?: (progress: BatchProgress) => void } = {},
   ): Promise<SpawnBatchResult> {
     validateSpawnBatchRequest(request);
@@ -40,7 +43,7 @@ export class ConcurrentBatchRunner implements BatchRunner {
     let completed = 0;
     const results = await Promise.all(
       request.tasks.map((task, requestIndex) =>
-        this.runTask(task, requestIndex, context, parent, options.signal, () => {
+        this.runTask(task, requestIndex, context, routing, parent, options.signal, () => {
           completed += 1;
           options.onProgress?.({ completed, total: request.tasks.length, results: [] });
         }),
@@ -53,15 +56,41 @@ export class ConcurrentBatchRunner implements BatchRunner {
     task: SpawnBatchRequest["tasks"][number],
     requestIndex: number,
     context: ParentContext,
+    routing: ModelRoutingContext,
     parent: Awaited<ReturnType<ChildHost["inspect"]>>,
     signal: AbortSignal | undefined,
     onComplete: () => void,
   ): Promise<ChildResult> {
     const taskId = taskIdFor(requestIndex);
-    const base = { taskId, requestIndex, truncated: false, paneClosed: false };
+    const resolution = resolveChildRuntime({ task, parent: context, routing });
+    const base = {
+      taskId,
+      requestIndex,
+      truncated: false,
+      paneClosed: false,
+      ...(task.role === undefined ? {} : { role: task.role }),
+      ...(resolution.ok ? { selection: visibleSelection(resolution.selection) } : resolution.selection ? { selection: resolution.selection } : {}),
+    };
+    if (!resolution.ok) {
+      const result: ChildResult = { ...base, status: "failed", error: { code: resolution.code, message: resolution.message } };
+      onComplete();
+      return result;
+    }
+    const childContext: ParentContext = {
+      ...context,
+      model: resolution.selection.model ?? context.model,
+      thinkingLevel: resolution.selection.thinkingLevel ?? context.thinkingLevel,
+    };
     let child;
     try {
-      child = await this.host.start({ taskId, placement: task.placement ?? "tab", sessionId: randomUUID(), context, parent }, signal);
+      child = await this.host.start({
+        taskId,
+        placement: task.placement ?? "tab",
+        sessionId: randomUUID(),
+        context: childContext,
+        rolePrompt: resolution.selection.rolePrompt,
+        parent,
+      }, signal);
     } catch (error) {
       const childFields = fieldsForStartError(error);
       const result: ChildResult = {
@@ -167,6 +196,11 @@ async function raceAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<
       },
     );
   });
+}
+
+function visibleSelection(selection: import("./domain.js").ChildRuntimeSelection): Omit<import("./domain.js").ChildRuntimeSelection, "rolePrompt"> {
+  const { rolePrompt: _, ...visible } = selection;
+  return visible;
 }
 
 function fieldsForStartError(error: unknown): Pick<ChildResult, "sessionId" | "sessionPath" | "location"> {

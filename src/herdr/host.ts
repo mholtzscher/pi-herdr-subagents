@@ -15,6 +15,7 @@ export interface StartChildRequest {
   placement: ChildPlacement;
   sessionId: string;
   context: ParentContext;
+  rolePrompt?: string;
   parent: HostInspection;
 }
 
@@ -232,6 +233,7 @@ function piArgs(request: StartChildRequest): string[] {
   const args = ["--session-id", request.sessionId, "--name", childLabel(request), "--exclude-tools", "spawn_pi"];
   if (request.context.model) args.push("--model", `${request.context.model.provider}/${request.context.model.id}`);
   if (request.context.thinkingLevel) args.push("--thinking", request.context.thinkingLevel);
+  if (request.rolePrompt) args.push("--append-system-prompt", request.rolePrompt);
   return args;
 }
 
