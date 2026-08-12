@@ -43,6 +43,7 @@ A failed, blocked, interrupted, or unattributable Child Pi left visible for huma
 - Concurrent children may edit the same checkout; the extension does not prevent or reconcile conflicts.
 - A successful result comes from the marked child Pi session, not terminal scraping.
 - A Collected Child is closed only after its result and session ID are safely read.
-- An Inspectable Child remains open.
+- An Inspectable Child remains open while its Parent Pi session is active.
+- When the Parent Pi exits or replaces its session, the extension closes still-open child panes it created after verifying their occupants; `/reload` leaves them open.
 - Closing a child pane does not delete its persisted Pi session; the session can be resumed later by ID.
 - Child Pis cannot invoke the batch spawn tool.

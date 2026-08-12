@@ -26,7 +26,7 @@ This is an expert pilot. Concurrent children may edit the same checkout; the ext
 - Results come from marked child Pi session entries. Terminal output is not an attributed result.
 - The extension closes only resources created by the current call and still occupied by the expected child.
 - Closing a pane does not delete its Pi session; users can resume it by returned session ID.
-- The batch exists only for the current tool call. The extension does not persist or recover orchestration state, manage completed runtimes, or detach batches for background collection.
+- The batch exists only for the current tool call. The extension does not persist or recover orchestration state, manage completed runtimes, or detach batches for background collection. It retains only current-parent-session child identities to close still-open panes during Parent session shutdown.
 
 ## Batch contract
 
@@ -37,7 +37,7 @@ This is an expert pilot. Concurrent children may edit the same checkout; the ext
 5. Close a child only after collecting its attributed answer and session ID.
 6. Leave blocked, failed, aborted, and unattributable children visible, returning their Herdr location and session ID when known.
 
-If the Parent Pi aborts the tool call, stop waiting without interrupting or closing uncollected children. The runner classifies known unfinished children as `parent_aborted` when it can return an aggregate result; regardless of tool-framework result delivery, leaving those children open is guaranteed.
+If the Parent Pi aborts the tool call, stop waiting without interrupting or closing uncollected children. The runner classifies known unfinished children as `parent_aborted` when it can return an aggregate result; regardless of tool-framework result delivery, leaving those children open is guaranteed while the Parent session remains active. On Parent session shutdown for exit, new, resume, or fork, the extension closes still-open child panes it created after occupant verification; `/reload` leaves them open.
 
 For batches with multiple tasks, the result includes a fixed warning that concurrent children share one checkout. Edits can overwrite or invalidate each other, children can observe changing files, and tests or Git operations can interfere. The extension performs no locking, write detection, reconciliation, or rollback.
 
@@ -265,7 +265,7 @@ The expert pilot is accepted when:
 - [ ] Successful summaries come from the exact task marker and Pi JSONL ancestry; terminal output is never presented as attributed success.
 - [ ] Successful children return resumable session IDs and close only after collection and occupant verification.
 - [ ] A returned session ID resumes successfully after child closure.
-- [ ] Blocked, failed, aborted, and unattributable children remain visible with known locations.
+- [ ] Blocked, failed, aborted, and unattributable children remain visible with known locations while the Parent session remains active; owned, verified child panes close on Parent exit or session replacement.
 - [ ] Parent abort neither interrupts nor closes accepted child work.
 - [ ] Multi-task results warn about unrestricted shared-checkout interference.
 - [ ] Logs contain no prompts, answers, environment values, or credentials.
