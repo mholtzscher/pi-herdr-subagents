@@ -64,11 +64,11 @@ test("passes selected role identity as one non-shell Pi argument", async () => {
       placement: "tab",
       sessionId: "child",
       context: parentContext,
-      rolePrompt: "Act as an explorer; do not edit.",
+      rolePrompt: "README.md",
       parent: { workspaceId: "w21", tabId: "w21:t1", paneId: "w21:p1", socketPath: server.path },
     });
     const args = calls.find((call) => call.method === "agent.start")?.params.args as string[];
-    assert.deepEqual(args.slice(-2), ["--append-system-prompt", "Act as an explorer; do not edit."]);
+    assert.deepEqual(args.slice(-2), ["--append-system-prompt", "Child role instructions:\nREADME.md"]);
   } finally {
     await server.close();
   }
@@ -174,20 +174,24 @@ test("routes independent tasks while leaving route failures pane-free", async ()
         { prompt: "two", role: "missing" },
         { prompt: "three", model: "missing/model" },
         { prompt: "four", model: "routed/model", thinking: "off" },
+        { prompt: "five", role: "unavailable" },
       ],
     },
     parentContext,
     {
       config: {
         defaults: { thinking: "medium" },
-        roles: { explore: { prompt: "Read only.", model: "routed/model", thinking: "low" } },
+        roles: {
+          explore: { prompt: "Read only.", model: "routed/model", thinking: "low" },
+          unavailable: { prompt: "Private role.", model: "private/model" },
+        },
       },
       availableModels: [{ provider: "routed", id: "model" }],
     },
   );
 
-  assert.deepEqual(result.results.map((child) => child.status), ["succeeded", "failed", "failed", "succeeded"]);
-  assert.deepEqual(result.results.map((child) => child.error?.code), [undefined, "role_not_found", "model_routing_failed", undefined]);
+  assert.deepEqual(result.results.map((child) => child.status), ["succeeded", "failed", "failed", "succeeded", "failed"]);
+  assert.deepEqual(result.results.map((child) => child.error?.code), [undefined, "role_not_found", "model_routing_failed", undefined, "model_routing_failed"]);
   assert.deepEqual(host.started.map((child) => child.taskId), ["task-1", "task-4"]);
   assert.deepEqual(host.startRequests[0].context.model, { provider: "routed", id: "model" });
   assert.equal(host.startRequests[0].context.thinkingLevel, "low");
@@ -197,6 +201,8 @@ test("routes independent tasks while leaving route failures pane-free", async ()
   assert.equal(result.results[0].selection?.thinkingSource, "role");
   assert.equal(result.results[3].selection?.modelSource, "explicit");
   assert.equal(result.results[3].selection?.thinkingSource, "explicit");
+  assert.deepEqual(result.results[4].selection, { thinkingLevel: "medium", thinkingSource: "default" });
+  assert.doesNotMatch(JSON.stringify(result.results[4]), /private\/model|Private role/);
 });
 
 test("session cleanup closes tracked children but leaves uncertain occupants alone", async () => {

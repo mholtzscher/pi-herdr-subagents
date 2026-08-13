@@ -47,16 +47,26 @@ test("loads missing config as empty and validates the complete config shape", ()
   }
 });
 
-test("rejects role prompts that Pi could interpret as existing files", () => {
+test("preserves literal role prompts that happen to name existing files", () => {
   const directory = mkdtempSync(join(tmpdir(), "child-roles-"));
   const promptPath = join(directory, "prompt.txt");
   const configPath = join(directory, "herdr-subagents.json");
   try {
     writeFileSync(promptPath, "not a prompt");
     writeFileSync(configPath, JSON.stringify({ roles: { explore: { prompt: promptPath } } }));
-    assert.match(errorOf(loadChildRolesConfig(configPath)), /existing local path/);
+    const loaded = loadChildRolesConfig(configPath);
+    assert.equal(loaded.ok, true);
+    if (loaded.ok) assert.equal(loaded.config.roles.explore.prompt, promptPath);
   } finally {
     rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("rejects inherited object properties as unknown roles", () => {
+  for (const role of ["toString", "constructor", "hasOwnProperty", "__proto__"]) {
+    const resolution = resolve({ prompt: "inspect", role });
+    assert.equal(resolution.ok, false);
+    if (!resolution.ok) assert.equal(resolution.code, "role_not_found");
   }
 });
 
@@ -110,6 +120,16 @@ test("keeps role prompts and model mappings out of guidance and routing errors",
   const unknown = resolve({ prompt: "inspect", role: "missing" });
   assert.equal(unknown.ok, false);
   if (!unknown.ok) assert.equal(unknown.code, "role_not_found");
+
+  const unavailableRoleModel = resolve({ prompt: "inspect", role: "explore" }, []);
+  assert.deepEqual(unavailableRoleModel, {
+    ok: false,
+    code: "model_routing_failed",
+    message: "The model configured for the requested Child role is not available",
+    selection: { thinkingLevel: "low", thinkingSource: "role" },
+  });
+  assert.doesNotMatch(JSON.stringify(unavailableRoleModel), /role\/model/);
+
   const guidance = roleGuidance(config)!;
   assert.match(guidance, /explore/);
   assert.match(guidance, /Read-only exploration/);

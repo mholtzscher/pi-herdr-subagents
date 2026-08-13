@@ -51,9 +51,11 @@ export function resolveChildRuntime(input: {
   parent: ParentContext;
   routing: ModelRoutingContext;
 }): ChildRuntimeResolution {
-  const role = input.task.role === undefined ? undefined : input.routing.config.roles[input.task.role];
-  if (input.task.role !== undefined && !role) {
-    return { ok: false, code: "role_not_found", message: `Child role ${JSON.stringify(input.task.role)} is not configured` };
+  const roleName = input.task.role;
+  const hasRole = roleName !== undefined && Object.prototype.hasOwnProperty.call(input.routing.config.roles, roleName);
+  const role = hasRole ? input.routing.config.roles[roleName] : undefined;
+  if (roleName !== undefined && !hasRole) {
+    return { ok: false, code: "role_not_found", message: `Child role ${JSON.stringify(roleName)} is not configured` };
   }
 
   const modelChoice = select(input.task.model, role?.model, input.routing.config.defaults.model, input.parent.model && `${input.parent.model.provider}/${input.parent.model.id}`);
@@ -66,6 +68,15 @@ export function resolveChildRuntime(input: {
 
   if (modelChoice.value && modelChoice.source !== "parent" && !input.routing.availableModels.some((model) => model.provider === selection.model!.provider && model.id === selection.model!.id)) {
     const visibleSelection = withoutRolePrompt(selection);
+    if (modelChoice.source === "role") {
+      const { model: _, modelSource: __, ...redactedSelection } = visibleSelection;
+      return {
+        ok: false,
+        code: "model_routing_failed",
+        message: "The model configured for the requested Child role is not available",
+        ...(Object.keys(redactedSelection).length ? { selection: redactedSelection } : {}),
+      };
+    }
     return {
       ok: false,
       code: "model_routing_failed",
@@ -107,7 +118,6 @@ function parseRole(value: unknown, name: string): ChildRole {
   if (!isRecord(value)) throw new Error(`${name} must be an object`);
   rejectUnsupported(value, ["description", "prompt", "model", "thinking"], name);
   if (!nonWhitespace(value.prompt)) throw new Error(`${name}.prompt must be a non-whitespace string`);
-  if (existsSync(value.prompt)) throw new Error(`${name}.prompt must not name an existing local path`);
   if (value.description !== undefined && !nonWhitespace(value.description)) throw new Error(`${name}.description must be a non-whitespace string`);
   return {
     prompt: value.prompt,

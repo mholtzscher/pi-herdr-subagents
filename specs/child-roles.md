@@ -1,6 +1,6 @@
 # Child Roles — Implementation Spec
 
-**Status:** Owner input required on three conflicts below  
+**Status:** Owner input required on two conflicts below
 **Effort:** L (approximately 4–8 focused hours, 75% confidence)  
 **Approved by:** User  
 **Date:** 2026-08-12
@@ -58,7 +58,7 @@ This release does not infer roles, select models from cost metadata, provide bui
 - Wrong types, invalid or empty required values, and unsupported properties invalidate the complete config.
 - Config loads once with the extension. `/reload` reloads it; edits do not affect an already loaded instance.
 - `description` is Parent-facing guidance. Full role prompts and model mappings never enter tool guidance, rendering, results, or Parent model context.
-- Role prompts must not contain secrets because process arguments may be visible to other local processes.
+- Role prompts must not contain secrets because process arguments may be visible to other local processes. Transport prefixes the prompt with a literal instruction heading so Pi cannot interpret a prompt matching a path in the Child working directory as a file.
 
 ## Types and Ownership
 
@@ -225,7 +225,7 @@ export interface StartChildRequest {
 }
 ```
 
-`piArgs()` adds canonical `--model`, `--thinking`, and one `--append-system-prompt` argument when selected. Herdr receives an argument array; values are never shell-interpolated.
+`piArgs()` adds canonical `--model`, `--thinking`, and one `--append-system-prompt` argument when selected. The role prompt argument is prefixed with a literal instruction heading so it cannot match a local path. Herdr receives an argument array; values are never shell-interpolated.
 
 ## Delivery and Verification
 
@@ -255,6 +255,5 @@ Acceptance requires:
 
 ## Owner Decisions Required
 
-1. **Literal role prompt transport:** Pi 0.84.1 treats an `--append-system-prompt` value matching an existing path as a file. Decide whether to constrain prompts, change transport, or accept this interpretation.
-2. **Inherited Parent model validation:** Decide whether an inherited Parent model is checked against `getAvailable()`. Checking may break the compatibility guarantee; not checking limits catalogue validation to task, role, and default routes.
-3. **Whitespace role names:** Decide whether configured role names must be non-whitespace, matching task-role validation, or whether whitespace-only names are intentionally valid.
+1. **Inherited Parent model validation:** Decide whether an inherited Parent model is checked against `getAvailable()`. Checking may break the compatibility guarantee; not checking limits catalogue validation to task, role, and default routes.
+2. **Whitespace role names:** Decide whether configured role names must be non-whitespace, matching task-role validation, or whether whitespace-only names are intentionally valid.

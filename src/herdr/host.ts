@@ -233,7 +233,7 @@ function piArgs(request: StartChildRequest): string[] {
   const args = ["--session-id", request.sessionId, "--name", childLabel(request), "--exclude-tools", "spawn_pi"];
   if (request.context.model) args.push("--model", `${request.context.model.provider}/${request.context.model.id}`);
   if (request.context.thinkingLevel) args.push("--thinking", request.context.thinkingLevel);
-  if (request.rolePrompt) args.push("--append-system-prompt", request.rolePrompt);
+  if (request.rolePrompt) args.push("--append-system-prompt", `Child role instructions:\n${request.rolePrompt}`);
   return args;
 }
 

@@ -34,7 +34,7 @@ Optionally copy [`herdr-subagents.example.json`](./herdr-subagents.example.json)
 
 Tasks can set `role`, `model`, and `thinking`. Model and thinking resolve independently: task override, role, configured default, then Parent setting. A role supplies only an appended identity prompt; it does not replace Pi's system prompt, tools, or project context. The configured role descriptions are visible to Parent Pi, but role prompts and model mappings are not. Config is loaded when the extension loads, so `/reload` picks up edits. Invalid configuration blocks a batch before Herdr is inspected.
 
-Role prompts are passed as local process arguments. Do not put secrets in them. Prompts that name an existing local path are rejected because Pi would interpret them as files.
+Role prompts are passed as local process arguments. Do not put secrets in them. The extension prefixes them as literal Child role instructions so Pi does not interpret prompts that happen to match paths in the Child working directory as files.
 
 At session start, the extension generates and stores a short internal Parent label (for example, `amber-finch`). The Parent tab is renamed `Pi [<parent>]`; each child tab, pane, and Pi session is named `Pi [<parent>] task-N` (for example, `Pi [amber-finch] task-1`). The label is unrelated to the Parent Pi's `/name` and does not affect the `/resume` list. This keeps children from concurrent Parent Pis distinguishable. Successful results include a child session ID. Closing the child pane does **not** delete that session; resume it with:
 
