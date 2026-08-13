@@ -76,12 +76,12 @@ export function registerOrchestrator(pi: ExtensionAPI, configResult: ChildRolesC
         ctx.ui.notify(available() ? `Orchestrator mode is ${enabled ? "enabled" : "disabled"}.` : unavailableMessage(configResult), available() ? "info" : "warning");
         return;
       }
+      if (action === "off") return setEnabled(false, ctx);
       if (!available()) {
         ctx.ui.notify(unavailableMessage(configResult), "warning");
         return;
       }
       if (action === "on") return setEnabled(true, ctx);
-      if (action === "off") return setEnabled(false, ctx);
       if (action === "toggle") return setEnabled(!enabled, ctx);
       ctx.ui.notify("Usage: /orchestrator [on|off|status|toggle]", "error");
     },

@@ -163,6 +163,23 @@ test("keeps enabled preference while spawn_pi is temporarily inactive", async ()
   });
 });
 
+test("disables and persists while spawn_pi is inactive", async () => {
+  await withParentEnvironment(async () => {
+    const activeTools: string[] = [];
+    const h = harness(enabledConfig, activeTools);
+    (h.ctx.sessionManager as { getEntries: () => unknown[] }).getEntries = () => [
+      { type: "custom", customType: ORCHESTRATOR_STATE_ENTRY, data: { enabled: true } },
+    ];
+    h.emit("session_start", { reason: "resume" });
+
+    await h.command.handler("off", h.ctx);
+    assert.deepEqual(h.appended.at(-1), { customType: ORCHESTRATOR_STATE_ENTRY, data: { enabled: false } });
+
+    activeTools.push("spawn_pi");
+    assert.equal(h.emit("before_agent_start", { systemPrompt: "base" }), undefined);
+  });
+});
+
 test("keeps the mode unavailable in children, outside Herdr, and with invalid config", async () => {
   await withParentEnvironment(async () => {
     const child = harness(enabledConfig, []);
