@@ -31,10 +31,20 @@ test("loads missing config as empty and validates the complete config shape", ()
   const path = join(directory, "herdr-subagents.json");
   try {
     assert.deepEqual(loadChildRolesConfig(path), { ok: true, path, config: { defaults: {}, roles: {} } });
-    writeFileSync(path, JSON.stringify({ defaults: { model: "provider/a/b" }, roles: { explore: { prompt: "Explore." } } }));
+    writeFileSync(path, JSON.stringify({ defaults: { model: "provider/a/b" }, roles: { explore: { prompt: "Explore.", model: ["provider/first", "provider/a/b"] } } }));
     const loaded = loadChildRolesConfig(path);
     assert.equal(loaded.ok, true);
-    if (loaded.ok) assert.equal(loaded.config.defaults.model, "provider/a/b");
+    if (loaded.ok) {
+      assert.equal(loaded.config.defaults.model, "provider/a/b");
+      assert.deepEqual(loaded.config.roles.explore.model, ["provider/first", "provider/a/b"]);
+    }
+
+    for (const model of [[], [""], [42], [" provider/model"], ["provider/model "], ["provider"], ["/model"]]) {
+      writeFileSync(path, JSON.stringify({ defaults: { model } }));
+      assert.match(errorOf(loadChildRolesConfig(path)), /exact provider\/model-id|non-empty array/);
+    }
+    writeFileSync(path, JSON.stringify({ roles: { explore: { prompt: "Explore.", model: [] } } }));
+    assert.match(errorOf(loadChildRolesConfig(path)), /non-empty array/);
 
     writeFileSync(path, JSON.stringify({ roles: { "   ": { prompt: "Explore." } } }));
     assert.match(errorOf(loadChildRolesConfig(path)), /role names/);
@@ -91,7 +101,36 @@ test("resolves model and thinking independently with source metadata", () => {
   }
 });
 
-test("does not validate inherited Parent model, but validates only the final selected route", () => {
+test("uses the first available candidate from the highest-precedence model layer", () => {
+  const routed = resolveChildRuntime({
+    task: { prompt: "inspect", role: "explore" },
+    parent,
+    routing: {
+      config: {
+        defaults: { model: ["default/missing", "default/model"] },
+        roles: { explore: { prompt: "Explore.", model: ["role/missing", "role/a/b"] } },
+      },
+      availableModels: [{ provider: "default", id: "model" }, { provider: "role", id: "a/b" }],
+    },
+  });
+  assert.deepEqual(routed, {
+    ok: true,
+    selection: { model: { provider: "role", id: "a/b" }, modelSource: "role", thinkingLevel: "high", thinkingSource: "parent", rolePrompt: "Explore." },
+  });
+
+  const defaultRouted = resolveChildRuntime({
+    task: { prompt: "inspect" },
+    parent,
+    routing: {
+      config: { defaults: { model: ["default/missing", "default/model"] }, roles: {} },
+      availableModels: [{ provider: "default", id: "model" }],
+    },
+  });
+  assert.equal(defaultRouted.ok, true);
+  if (defaultRouted.ok) assert.deepEqual(defaultRouted.selection.model, { provider: "default", id: "model" });
+});
+
+test("does not validate inherited Parent models or fall through unavailable chosen layers", () => {
   const inherited = resolveChildRuntime({
     task: { prompt: "inspect" },
     parent,
@@ -100,19 +139,28 @@ test("does not validate inherited Parent model, but validates only the final sel
   assert.equal(inherited.ok, true);
   if (inherited.ok) assert.equal(inherited.selection.modelSource, "parent");
 
-  const overridden = resolve({ prompt: "inspect", model: "explicit/nested/model" });
-  assert.equal(overridden.ok, true);
+  const unavailableDefault = resolveChildRuntime({
+    task: { prompt: "inspect" },
+    parent,
+    routing: {
+      config: { defaults: { model: ["default/missing", "default/also-missing"] }, roles: {} },
+      availableModels: [{ provider: "parent", id: "unavailable" }],
+    },
+  });
+  assert.deepEqual(unavailableDefault, {
+    ok: false,
+    code: "model_routing_failed",
+    message: "The configured default Child model is not available",
+    selection: { thinkingLevel: "high", thinkingSource: "parent" },
+  });
+  assert.doesNotMatch(JSON.stringify(unavailableDefault), /default\/(missing|also-missing)/);
+
   const unavailable = resolve({ prompt: "inspect", role: "explore", model: "missing/model" });
   assert.deepEqual(unavailable, {
     ok: false,
     code: "model_routing_failed",
     message: "Requested Child model missing/model is not available",
-    selection: {
-      model: { provider: "missing", id: "model" },
-      modelSource: "explicit",
-      thinkingLevel: "low",
-      thinkingSource: "role",
-    },
+    selection: { thinkingLevel: "low", thinkingSource: "role" },
   });
 });
 
@@ -121,14 +169,21 @@ test("keeps role prompts and model mappings out of guidance and routing errors",
   assert.equal(unknown.ok, false);
   if (!unknown.ok) assert.equal(unknown.code, "role_not_found");
 
-  const unavailableRoleModel = resolve({ prompt: "inspect", role: "explore" }, []);
+  const unavailableRoleModel = resolveChildRuntime({
+    task: { prompt: "inspect", role: "explore" },
+    parent,
+    routing: {
+      config: { defaults: {}, roles: { explore: { prompt: "Explore the repository.", model: ["private/first", "private/model"], thinking: "low" } } },
+      availableModels: [],
+    },
+  });
   assert.deepEqual(unavailableRoleModel, {
     ok: false,
     code: "model_routing_failed",
     message: "The model configured for the requested Child role is not available",
     selection: { thinkingLevel: "low", thinkingSource: "role" },
   });
-  assert.doesNotMatch(JSON.stringify(unavailableRoleModel), /role\/model/);
+  assert.doesNotMatch(JSON.stringify(unavailableRoleModel), /private\/(first|model)/);
 
   const guidance = roleGuidance(config)!;
   assert.match(guidance, /explore/);

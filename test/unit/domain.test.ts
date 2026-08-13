@@ -11,6 +11,7 @@ test("validates the fixed task limit and prompt", () => {
   validateSpawnBatchRequest({ tasks: [{ prompt: "inspect", role: "explore", model: "provider/model/with/slash", thinking: "low" }] });
   assert.throws(() => validateSpawnBatchRequest({ tasks: [{ prompt: "inspect", role: "   " }] }), RequestValidationError);
   assert.throws(() => validateSpawnBatchRequest({ tasks: [{ prompt: "inspect", model: "provider-only" }] }), RequestValidationError);
+  assert.throws(() => validateSpawnBatchRequest({ tasks: [{ prompt: "inspect", model: ["provider/first", "provider/second"] as unknown as string }] }), RequestValidationError);
 });
 
 test("builds the exact task marker envelope", () => {
