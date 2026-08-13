@@ -52,6 +52,31 @@ test("labels the Parent tab and every visible child surface with its readable Pa
   }
 });
 
+test("retries child startup until a newly created pane reaches its shell prompt", async () => {
+  let startAttempts = 0;
+  const server = await createFakeHerdrServer((request) => {
+    if (request.method === "tab.create") return { tab: { tab_id: "w21:t2" }, root_pane: { pane_id: "w21:p9" } };
+    if (request.method === "agent.start") {
+      startAttempts += 1;
+      if (startAttempts === 1) throw Object.assign(new Error("agent target pane w21:p9 is not an available shell"), { code: "agent_pane_busy" });
+      return {};
+    }
+    return { agent: { terminal_id: "term-1", agent_session: { kind: "path", value: "/missing.jsonl" } } };
+  });
+  try {
+    await new HerdrChildHost().start({
+      taskId: "task-1" as never,
+      placement: "tab",
+      sessionId: "child",
+      context: parentContext,
+      parent: { workspaceId: "w21", tabId: "w21:t1", paneId: "w21:p1", socketPath: server.path },
+    });
+    assert.equal(startAttempts, 2);
+  } finally {
+    await server.close();
+  }
+});
+
 test("passes selected role identity through a private temporary file", async () => {
   const calls: Array<{ method: string; params: Record<string, unknown> }> = [];
   let promptPath = "";

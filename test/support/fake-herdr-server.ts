@@ -16,7 +16,8 @@ export async function createFakeHerdrServer(handler: (request: { id: string; met
       try {
         socket.end(`${JSON.stringify({ id: request.id, result: handler(request) })}\n`);
       } catch (error) {
-        socket.end(`${JSON.stringify({ id: request.id, error: { code: "fake_error", message: error instanceof Error ? error.message : String(error) } })}\n`);
+        const code = typeof error === "object" && error !== null && "code" in error && typeof error.code === "string" ? error.code : "fake_error";
+        socket.end(`${JSON.stringify({ id: request.id, error: { code, message: error instanceof Error ? error.message : String(error) } })}\n`);
       }
     });
   });
