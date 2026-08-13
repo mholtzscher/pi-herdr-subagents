@@ -1,6 +1,6 @@
 # Child Roles — Implementation Spec
 
-**Status:** Owner input required on two conflicts below
+**Status:** Implemented
 **Effort:** L (approximately 4–8 focused hours, 75% confidence)  
 **Approved by:** User  
 **Date:** 2026-08-12
@@ -25,21 +25,21 @@ A missing config file means empty defaults and no roles. Invalid JSON or config 
 
 ### Scope boundaries
 
-This release does not infer roles, select models from cost metadata, provide built-in vendor/model defaults or ordered fallbacks, or add project-local configuration. Roles do not define custom per-task prompts, tools, permissions, skills, placement, task templates, or reusable Child runtimes. Pi retains responsibility for thinking-level capability clamping.
+This release does not infer roles, select models from cost metadata, provide built-in vendor/model defaults, or add project-local configuration. Configured default and role model fields may provide ordered availability fallbacks; task overrides and inherited Parent models remain single selections. Roles do not define custom per-task prompts, tools, permissions, skills, placement, task templates, or reusable Child runtimes. Pi retains responsibility for thinking-level capability clamping.
 
 ## Configuration Contract
 
 ```json
 {
   "defaults": {
-    "model": "openai/gpt-5.6-terra",
+    "model": ["openai/gpt-5.6-terra", "openai/gpt-5.6-sol"],
     "thinking": "medium"
   },
   "roles": {
     "explore": {
       "description": "Fast, read-oriented repository exploration",
       "prompt": "You are a repository explorer. Map relevant code and report evidence. Do not edit files unless explicitly asked.",
-      "model": "openai/gpt-5.6-sol",
+      "model": ["openai/gpt-5.6-sol", "openai/gpt-5.6-terra"],
       "thinking": "low"
     },
     "implement": {
@@ -53,7 +53,7 @@ This release does not infer roles, select models from cost metadata, provide bui
 
 - `defaults` and `roles` are optional and normalize to empty objects. Defaults may contain only `model` and `thinking`; they never define identity.
 - Role names are case-sensitive, non-empty strings. Every role requires a non-whitespace `prompt`; optional `description` must be non-whitespace.
-- Optional `model` and `thinking` fields follow the same validation in defaults, roles, and tasks. A model is an exact canonical `provider/model-id`; split on the first `/` because the model ID may contain `/`.
+- `defaults.model` and `roles.<name>.model` accept either one exact canonical `provider/model-id` string or a non-empty ordered array of exact canonical strings. Tasks accept only one exact canonical string. Reject empty arrays, non-string entries, whitespace-padded entries, and malformed references. Split on the first `/` because the model ID may contain `/`.
 - Thinking is one of `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`.
 - Wrong types, invalid or empty required values, and unsupported properties invalidate the complete config.
 - Config loads once with the extension. `/reload` reloads it; edits do not affect an already loaded instance.
@@ -124,8 +124,10 @@ The TypeBox schema and `validateSpawnBatchRequest()` apply the task validation a
 ### `src/model-routing.ts`
 
 ```ts
+export type ConfiguredModel = string | string[];
+
 export interface ChildRuntimeDefaults {
-  model?: string;
+  model?: ConfiguredModel;
   thinking?: ChildThinkingLevel;
 }
 
@@ -172,7 +174,7 @@ export function roleGuidance(config: ChildRolesConfig): string | undefined;
 
 The loader performs synchronous extension-load I/O. Missing files produce a successful empty config; parse or validation errors return the path without crashing package loading.
 
-The resolver is pure. It validates a requested role before resolving model and thinking independently. Unknown roles return `role_not_found` even when task model/thinking overrides are present, because identity cannot be fulfilled. Only the highest-precedence selected route is checked against `availableModels`; an unavailable lower-precedence value does not fail an overriding route. An unavailable checked route returns `model_routing_failed` without fallback. If no layer selects a model, omit it and let Pi use normal startup selection.
+The resolver is pure. It validates a requested role before resolving model and thinking independently. Unknown roles return `role_not_found` even when task model/thinking overrides are present, because identity cannot be fulfilled. It chooses a model layer by precedence first. A selected task, role, or default layer is checked against `availableModels`; scalar layers have one candidate and configured arrays select their first available candidate by exact provider/id match. If no candidate in that selected layer is available, return `model_routing_failed` without falling through to a lower-precedence layer. Inherited Parent models bypass availability validation. If no layer selects a model, omit it and let Pi use normal startup selection.
 
 `roleGuidance()` returns only role names and optional descriptions. This in-process module needs no adapter or class hierarchy.
 
@@ -231,7 +233,7 @@ export interface StartChildRequest {
 
 | ID | Deliverable | Depends on | Verification |
 |---|---|---|---|
-| D1 | Add domain types plus strict config loader, guidance, and pure resolver in `src/model-routing.ts`. | — | Unit tests for config normalization/validation, precedence, mixed sources, canonical model parsing including IDs with `/`, unavailable final routes, overridden unavailable routes, and guidance redaction. |
+| D1 | Add domain types plus strict config loader, guidance, and pure resolver in `src/model-routing.ts`. | — | Unit tests for scalar and ordered config models, validation, precedence, first available candidate selection, slash-containing IDs, unavailable selected layers, and guidance/routing redaction. |
 | D2 | Wire config/catalogue through `src/index.ts`, `src/tools.ts`, and `src/batch.ts`; add per-task failures, result metadata, rendering, and host prompt transport. | D1 | Adapter tests prove invalid config prevents runner/inspection/rename; batch tests mix valid tasks, unknown roles, and unavailable routes; host tests assert model, thinking, and one non-shell prompt argument. |
 | D3 | Update `README.md` and `CONTEXT.md`; preserve current lifecycle coverage. | D1, D2 | Tests cover missing config, compatibility without defaults, scoped-model independence, prompt redaction, `/reload` semantics, and unchanged attribution/abort/cleanup behavior. Run `npm run check` and `npm test`. |
 
@@ -240,7 +242,7 @@ Acceptance requires:
 - task → role → default → Parent precedence is applied independently to model and thinking, including mixed-source selections;
 - known roles append identity while preserving Pi's normal system and project context;
 - invalid config causes no batch side effects, while per-task routing errors do not stop independent tasks;
-- selected unavailable routes fail without fallback, and unavailable overridden routes do not fail;
+- selected config layers choose their first available candidate; all-unavailable selected layers fail without lower-layer fallback, while inherited Parent models remain unvalidated;
 - authenticated models outside Parent scoped models are routable;
 - results and guidance expose the approved metadata without role prompts or model mappings;
 - existing tasks remain behaviorally compatible without new fields or defaults; and
@@ -253,7 +255,7 @@ Acceptance requires:
 - Results report requested thinking while Pi may clamp the effective level.
 - Model availability can change after catalogue validation; later startup failure uses existing failure semantics.
 
-## Owner Decisions Required
+## Resolved Decisions
 
-1. **Inherited Parent model validation:** Decide whether an inherited Parent model is checked against `getAvailable()`. Checking may break the compatibility guarantee; not checking limits catalogue validation to task, role, and default routes.
-2. **Whitespace role names:** Decide whether configured role names must be non-whitespace, matching task-role validation, or whether whitespace-only names are intentionally valid.
+- Inherited Parent models bypass `getAvailable()` validation to preserve compatibility; catalogue validation applies to task, role, and default routes.
+- Configured role names must be non-whitespace strings.

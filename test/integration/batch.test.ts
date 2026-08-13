@@ -252,8 +252,8 @@ test("routes independent tasks while leaving route failures pane-free", async ()
       config: {
         defaults: { thinking: "medium" },
         roles: {
-          explore: { prompt: "Read only.", model: "routed/model", thinking: "low" },
-          unavailable: { prompt: "Private role.", model: "private/model" },
+          explore: { prompt: "Read only.", model: ["missing/model", "routed/model"], thinking: "low" },
+          unavailable: { prompt: "Private role.", model: ["private/first", "private/model"] },
         },
       },
       availableModels: [{ provider: "routed", id: "model" }],
@@ -272,7 +272,7 @@ test("routes independent tasks while leaving route failures pane-free", async ()
   assert.equal(result.results[3].selection?.modelSource, "explicit");
   assert.equal(result.results[3].selection?.thinkingSource, "explicit");
   assert.deepEqual(result.results[4].selection, { thinkingLevel: "medium", thinkingSource: "default" });
-  assert.doesNotMatch(JSON.stringify(result.results[4]), /private\/model|Private role/);
+  assert.doesNotMatch(JSON.stringify(result.results[4]), /private\/(first|model)|Private role/);
 });
 
 test("session cleanup closes tracked children but leaves uncertain occupants alone", async () => {

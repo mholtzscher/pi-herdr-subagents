@@ -20,19 +20,19 @@ Optionally copy [`herdr-subagents.example.json`](./herdr-subagents.example.json)
 
 ```json
 {
-  "defaults": { "model": "openai/gpt-5.6-terra", "thinking": "medium" },
+  "defaults": { "model": ["openai/gpt-5.6-terra", "openai/gpt-5.6-sol"], "thinking": "medium" },
   "roles": {
     "explore": {
       "description": "Fast, read-oriented repository exploration",
       "prompt": "Map relevant code and report evidence. Do not edit unless explicitly asked.",
-      "model": "openai/gpt-5.6-sol",
+      "model": ["openai/gpt-5.6-sol", "openai/gpt-5.6-terra"],
       "thinking": "low"
     }
   }
 }
 ```
 
-Tasks can set `role`, `model`, and `thinking`. Model and thinking resolve independently: task override, role, configured default, then Parent setting. A role supplies only an appended identity prompt; it does not replace Pi's system prompt, tools, or project context. The configured role descriptions are visible to Parent Pi, but role prompts and model mappings are not. Config is loaded when the extension loads, so `/reload` picks up edits. Invalid configuration blocks a batch before Herdr is inspected.
+Tasks can set `role`, `model`, and `thinking`. Model and thinking resolve independently: task override, role, configured default, then Parent setting. Config `defaults.model` and `roles.<name>.model` accept either one exact `provider/model-id` string or a non-empty ordered array of them (model IDs may contain `/`). The selected config layer is tried in order against available models; if none is available, the task fails rather than falling through to a lower-precedence layer. Task overrides remain a single string, and inherited Parent models are not availability-validated. A role supplies only an appended identity prompt; it does not replace Pi's system prompt, tools, or project context. The configured role descriptions are visible to Parent Pi, but role prompts and model mappings are not. Config is loaded when the extension loads, so `/reload` picks up edits. Invalid configuration blocks a batch before Herdr is inspected.
 
 Role prompts are passed as local process arguments. Do not put secrets in them. The extension prefixes them as literal Child role instructions so Pi does not interpret prompts that happen to match paths in the Child working directory as files.
 
