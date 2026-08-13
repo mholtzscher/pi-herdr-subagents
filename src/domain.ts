@@ -76,6 +76,7 @@ export interface ParentContext {
 export interface BatchProgress {
   completed: number;
   total: number;
+  /** Settled children only, in request order. */
   results: ChildResult[];
 }
 

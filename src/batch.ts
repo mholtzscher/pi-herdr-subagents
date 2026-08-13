@@ -35,24 +35,34 @@ export class ConcurrentBatchRunner implements BatchRunner {
     options: { signal?: AbortSignal; onProgress?: (progress: BatchProgress) => void } = {},
   ): Promise<SpawnBatchResult> {
     validateSpawnBatchRequest(request);
+    const total = request.tasks.length;
+    options.onProgress?.({ completed: 0, total, results: [] });
     let parent;
     try {
       parent = await this.host.inspect(options.signal);
       await this.host.renameParent(parent, context, options.signal);
     } catch (error) {
-      return options.signal?.aborted ? this.abortBeforeStart(request) : this.inspectFailure(request, messageOf(error));
+      const result = options.signal?.aborted
+        ? this.abortBeforeStart(request)
+        : this.inspectFailure(request, messageOf(error));
+      options.onProgress?.({ completed: total, total, results: [...result.results] });
+      return result;
     }
 
-    let completed = 0;
+    const settled: Array<ChildResult | undefined> = Array.from({ length: total });
+    const snapshot = () => {
+      const results = settled.filter((result): result is ChildResult => result !== undefined);
+      options.onProgress?.({ completed: results.length, total, results });
+    };
     const results = await Promise.all(
-      request.tasks.map((task, requestIndex) =>
-        this.runTask(task, requestIndex, context, routing, parent, options.signal, () => {
-          completed += 1;
-          options.onProgress?.({ completed, total: request.tasks.length, results: [] });
-        }),
-      ),
+      request.tasks.map(async (task, requestIndex) => {
+        const result = await this.runTask(task, requestIndex, context, routing, parent, options.signal);
+        settled[requestIndex] = result;
+        snapshot();
+        return result;
+      }),
     );
-    return { requested: request.tasks.length, results };
+    return { requested: total, results };
   }
 
   private async runTask(
@@ -62,7 +72,6 @@ export class ConcurrentBatchRunner implements BatchRunner {
     routing: ModelRoutingContext,
     parent: Awaited<ReturnType<ChildHost["inspect"]>>,
     signal: AbortSignal | undefined,
-    onComplete: () => void,
   ): Promise<ChildResult> {
     const taskId = taskIdFor(requestIndex);
     const resolution = resolveChildRuntime({ task, parent: context, routing });
@@ -84,7 +93,6 @@ export class ConcurrentBatchRunner implements BatchRunner {
         status: "failed",
         error: { code: resolution.code, message: resolution.message },
       };
-      onComplete();
       return result;
     }
     const childContext: ParentContext = {
@@ -115,7 +123,6 @@ export class ConcurrentBatchRunner implements BatchRunner {
           ? { code: "parent_aborted", message: "Parent stopped waiting before child startup completed" }
           : { code: "start_failed", message: messageOf(error) },
       };
-      onComplete();
       return result;
     }
     const childFields = { sessionId: child.sessionId, sessionPath: child.sessionPath, location: child.location };
@@ -129,7 +136,6 @@ export class ConcurrentBatchRunner implements BatchRunner {
         status: "parent_aborted",
         error: { code: "parent_aborted", message: "Parent stopped waiting; child remains open" },
       };
-      onComplete();
       return result;
     }
     if ("error" in settlement) {
@@ -139,7 +145,6 @@ export class ConcurrentBatchRunner implements BatchRunner {
         status: "failed",
         error: { code: "prompt_failed", message: messageOf(settlement.error) },
       };
-      onComplete();
       return result;
     }
     if (settlement.status === "blocked") {
@@ -149,7 +154,6 @@ export class ConcurrentBatchRunner implements BatchRunner {
         status: "blocked",
         error: { code: "blocked", message: "Child requires input and remains open" },
       };
-      onComplete();
       return result;
     }
     if (!child.sessionPath) {
@@ -159,7 +163,6 @@ export class ConcurrentBatchRunner implements BatchRunner {
         status: "unattributable",
         error: { code: "result_unreadable", message: "Child session path was not reported" },
       };
-      onComplete();
       return result;
     }
     try {
@@ -184,7 +187,6 @@ export class ConcurrentBatchRunner implements BatchRunner {
         truncated: answer.truncated,
         paneClosed,
       };
-      onComplete();
       return result;
     } catch (error) {
       const result: ChildResult = {
@@ -193,7 +195,6 @@ export class ConcurrentBatchRunner implements BatchRunner {
         status: "unattributable",
         error: { code: "result_unreadable", message: messageOf(error) },
       };
-      onComplete();
       return result;
     }
   }
