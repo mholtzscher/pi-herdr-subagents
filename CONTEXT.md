@@ -11,7 +11,7 @@ The product is intentionally not a persistent subagent orchestration system. Fre
 ## Language
 
 **Parent Pi**  
-The Pi session that invokes the batch spawn tool and receives results.
+The Pi session that invokes the batch spawn tool and receives results. It may enable session-wide Orchestrator Mode to receive proactive delegation guidance.
 
 **Child Pi**  
 A fresh Pi session started in a plugin-created Herdr tab or split for exactly one task.
@@ -46,4 +46,6 @@ A failed, blocked, interrupted, or unattributable Child Pi left visible for huma
 - An Inspectable Child remains open while its Parent Pi session is active.
 - When the Parent Pi exits or replaces its session, the extension closes still-open child panes it created after verifying their occupants; `/reload` leaves them open.
 - Closing a child pane does not delete its persisted Pi session; the session can be resumed later by ID.
-- Child Pis cannot invoke the batch spawn tool.
+- Child Pis cannot invoke the batch spawn tool or enable Parent Orchestrator Mode.
+- Orchestrator Mode changes Parent guidance only; it does not add persistent child runtimes or orchestration state.
+- Fresh Parent sessions use the configured orchestrator default, resumed sessions restore their own session-wide state, and forks inherit the source Parent's current state.

@@ -30,11 +30,12 @@ test("loads missing config as empty and validates the complete config shape", ()
   const directory = mkdtempSync(join(tmpdir(), "child-roles-"));
   const path = join(directory, "herdr-subagents.json");
   try {
-    assert.deepEqual(loadChildRolesConfig(path), { ok: true, path, config: { defaults: {}, roles: {} } });
-    writeFileSync(path, JSON.stringify({ defaults: { model: "provider/a/b" }, roles: { explore: { prompt: "Explore.", model: ["provider/first", "provider/a/b"] } } }));
+    assert.deepEqual(loadChildRolesConfig(path), { ok: true, path, config: { orchestrator: { enabled: false }, defaults: {}, roles: {} } });
+    writeFileSync(path, JSON.stringify({ orchestrator: { enabled: true }, defaults: { model: "provider/a/b" }, roles: { explore: { prompt: "Explore.", model: ["provider/first", "provider/a/b"] } } }));
     const loaded = loadChildRolesConfig(path);
     assert.equal(loaded.ok, true);
     if (loaded.ok) {
+      assert.equal(loaded.config.orchestrator.enabled, true);
       assert.equal(loaded.config.defaults.model, "provider/a/b");
       assert.deepEqual(loaded.config.roles.explore.model, ["provider/first", "provider/a/b"]);
     }
@@ -45,6 +46,11 @@ test("loads missing config as empty and validates the complete config shape", ()
     }
     writeFileSync(path, JSON.stringify({ roles: { explore: { prompt: "Explore.", model: [] } } }));
     assert.match(errorOf(loadChildRolesConfig(path)), /non-empty array/);
+
+    for (const orchestrator of [true, {}, { enabled: "yes" }, { enabled: true, prompt: "no" }]) {
+      writeFileSync(path, JSON.stringify({ orchestrator }));
+      assert.match(errorOf(loadChildRolesConfig(path)), /orchestrator/);
+    }
 
     writeFileSync(path, JSON.stringify({ roles: { "   ": { prompt: "Explore." } } }));
     assert.match(errorOf(loadChildRolesConfig(path)), /role names/);
