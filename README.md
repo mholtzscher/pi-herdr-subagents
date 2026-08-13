@@ -58,6 +58,12 @@ devenv shell
 npm install
 ```
 
+With direnv installed, allow the included `.envrc` to activate the environment automatically:
+
+```bash
+direnv allow
+```
+
 Run the same checks as CI:
 
 ```bash
