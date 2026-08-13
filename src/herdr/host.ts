@@ -75,6 +75,8 @@ export class SessionChildRegistry {
 }
 
 const REQUIRED_METHODS = ["tab.create", "tab.rename", "pane.split", "pane.rename", "agent.start", "agent.prompt", "agent.get", "pane.close"];
+const SHELL_READY_RETRY_CODES = new Set(["agent_pane_not_found", "agent_pane_unavailable", "agent_pane_busy"]);
+const SHELL_READY_ATTEMPTS = 240;
 
 type AgentInfoResponse = {
   agent?: {
@@ -214,12 +216,12 @@ export class HerdrChildHost implements ChildHost {
   }
 
   private async startWhenShellAvailable(client: HerdrSocketClient, params: Record<string, unknown>, signal?: AbortSignal): Promise<void> {
-    for (let attempt = 0; attempt < 40; attempt += 1) {
+    for (let attempt = 0; attempt < SHELL_READY_ATTEMPTS; attempt += 1) {
       try {
         await client.call("agent.start", params, signal);
         return;
       } catch (error) {
-        if (!(error instanceof HerdrProtocolError) || error.code !== "agent_pane_busy" || attempt === 39) throw error;
+        if (!(error instanceof HerdrProtocolError) || !SHELL_READY_RETRY_CODES.has(error.code) || attempt === SHELL_READY_ATTEMPTS - 1) throw error;
         await delay(250, signal);
       }
     }

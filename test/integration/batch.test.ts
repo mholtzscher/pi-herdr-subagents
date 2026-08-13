@@ -52,13 +52,19 @@ test("labels the Parent tab and every visible child surface with its readable Pa
   }
 });
 
-test("retries child startup until a newly created pane reaches its shell prompt", async () => {
+test("retries child startup until the pane and its shell are ready", async () => {
+  const readinessErrors = [
+    Object.assign(new Error("agent target pane w21:p9 not found"), { code: "agent_pane_not_found" }),
+    Object.assign(new Error("agent target pane w21:p9 has no live terminal"), { code: "agent_pane_unavailable" }),
+    Object.assign(new Error("agent target pane w21:p9 is not an available shell"), { code: "agent_pane_busy" }),
+  ];
   let startAttempts = 0;
   const server = await createFakeHerdrServer((request) => {
     if (request.method === "tab.create") return { tab: { tab_id: "w21:t2" }, root_pane: { pane_id: "w21:p9" } };
     if (request.method === "agent.start") {
+      const error = readinessErrors[startAttempts];
       startAttempts += 1;
-      if (startAttempts === 1) throw Object.assign(new Error("agent target pane w21:p9 is not an available shell"), { code: "agent_pane_busy" });
+      if (error) throw error;
       return {};
     }
     return { agent: { terminal_id: "term-1", agent_session: { kind: "path", value: "/missing.jsonl" } } };
@@ -71,7 +77,7 @@ test("retries child startup until a newly created pane reaches its shell prompt"
       context: parentContext,
       parent: { workspaceId: "w21", tabId: "w21:t1", paneId: "w21:p1", socketPath: server.path },
     });
-    assert.equal(startAttempts, 2);
+    assert.equal(startAttempts, 4);
   } finally {
     await server.close();
   }
