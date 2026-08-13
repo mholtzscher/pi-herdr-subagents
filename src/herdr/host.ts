@@ -125,7 +125,7 @@ export class HerdrChildHost implements ChildHost {
       location = await this.createLocation(client, request, signal);
       await client.call("pane.rename", { pane_id: location.paneId, label: childLabel(request) }, signal);
       rolePromptFile = request.rolePrompt ? await writeRolePrompt(request.rolePrompt) : undefined;
-      await client.call("agent.start", {
+      await this.startWhenShellAvailable(client, {
         name: agentName,
         kind: "pi",
         pane_id: location.paneId,
@@ -211,6 +211,18 @@ export class HerdrChildHost implements ChildHost {
 
   private async getAgent(client: HerdrSocketClient, target: string, signal?: AbortSignal): Promise<AgentInfoResponse> {
     return client.call<AgentInfoResponse>("agent.get", { target }, signal);
+  }
+
+  private async startWhenShellAvailable(client: HerdrSocketClient, params: Record<string, unknown>, signal?: AbortSignal): Promise<void> {
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      try {
+        await client.call("agent.start", params, signal);
+        return;
+      } catch (error) {
+        if (!(error instanceof HerdrProtocolError) || error.code !== "agent_pane_busy" || attempt === 39) throw error;
+        await delay(250, signal);
+      }
+    }
   }
 
   private async waitForSession(client: HerdrSocketClient, paneId: string, signal?: AbortSignal): Promise<AgentInfoResponse> {
