@@ -51,6 +51,27 @@ Blocked, failed, interrupted, and unattributable children are deliberately left 
 
 ## Development
 
+With [devenv](https://devenv.sh/) installed, enter the Node.js 22 development shell:
+
+```bash
+devenv shell
+npm install
+```
+
+With direnv installed, allow the included `.envrc` to activate the environment automatically:
+
+```bash
+direnv allow
+```
+
+Run the same checks as CI:
+
+```bash
+devenv test
+```
+
+Without devenv, use a local Node.js 22 installation:
+
 ```bash
 npm install
 npm run check
