@@ -16,5 +16,7 @@ test("validates the fixed task limit and prompt", () => {
 test("builds the exact task marker envelope", () => {
   const id = taskIdFor(0);
   assert.match(childPrompt(id, { prompt: "Inspect src" }), /<!-- pi-herdr-task:task-1 -->/);
-  assert.match(childPrompt(id, { prompt: "Inspect src" }), /Inspect src/);
+  const prompt = childPrompt(id, { prompt: "Inspect src" });
+  assert.match(prompt, /Inspect src/);
+  assert.match(prompt, /respect any configured Child role, including read-only constraints/);
 });

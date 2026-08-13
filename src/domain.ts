@@ -113,5 +113,5 @@ export function taskIdFor(index: number): TaskId {
 }
 
 export function childPrompt(taskId: TaskId, task: SpawnTask): string {
-  return `<!-- pi-herdr-task:${taskId} -->\nYou are a fresh Pi instance handling one bounded task for a Parent Pi.\n\nTask:\n${task.prompt}\n\nWork directly in the current checkout. Other Pi instances may be working concurrently.\nReturn a concise final answer containing:\n- what you found or changed;\n- verification performed;\n- unresolved issues or interference observed.`;
+  return `<!-- pi-herdr-task:${taskId} -->\nYou are a fresh Pi instance handling one bounded task for a Parent Pi.\n\nTask:\n${task.prompt}\n\nOperate in the current checkout and respect any configured Child role, including read-only constraints. Other Pi instances may be working concurrently.\nReturn a concise final answer containing:\n- what you found or changed;\n- verification performed;\n- unresolved issues or interference observed.`;
 }
