@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { ChildLocation, ChildPlacement, ParentContext, TaskId } from "../domain.js";
 import { assertSocketReachable, HerdrProtocolError, HerdrSocketClient, inspectCapabilities } from "./protocol.js";
 
@@ -117,15 +119,17 @@ export class HerdrChildHost implements ChildHost {
   async start(request: StartChildRequest, signal?: AbortSignal): Promise<HostedChild> {
     const client = new HerdrSocketClient(request.parent.socketPath);
     let location: ChildLocation | undefined;
+    let rolePromptFile: { dir: string; path: string } | undefined;
     const agentName = childName(request.taskId);
     try {
       location = await this.createLocation(client, request, signal);
       await client.call("pane.rename", { pane_id: location.paneId, label: childLabel(request) }, signal);
+      rolePromptFile = request.rolePrompt ? await writeRolePrompt(request.rolePrompt) : undefined;
       await client.call("agent.start", {
         name: agentName,
         kind: "pi",
         pane_id: location.paneId,
-        args: piArgs(request),
+        args: piArgs(request, rolePromptFile?.path),
         timeout_ms: 30_000,
       }, signal);
       const info = await this.waitForSession(client, location.paneId, signal);
@@ -136,6 +140,8 @@ export class HerdrChildHost implements ChildHost {
       const child = location ? await this.partialChild(request, location, agentName) : undefined;
       if (child?.terminalId) this.registry?.add(child);
       throw new StartChildError(messageOf(error), child);
+    } finally {
+      if (rolePromptFile) await rm(rolePromptFile.dir, { recursive: true, force: true }).catch(() => {});
     }
   }
 
@@ -229,11 +235,18 @@ export class HerdrChildHost implements ChildHost {
   }
 }
 
-function piArgs(request: StartChildRequest): string[] {
+async function writeRolePrompt(prompt: string): Promise<{ dir: string; path: string }> {
+  const dir = await mkdtemp(join(tmpdir(), "pi-herdr-role-"));
+  const path = join(dir, "prompt.md");
+  await writeFile(path, `Child role instructions:\n${prompt}`, { encoding: "utf8", mode: 0o600 });
+  return { dir, path };
+}
+
+function piArgs(request: StartChildRequest, rolePromptPath?: string): string[] {
   const args = ["--session-id", request.sessionId, "--name", childLabel(request), "--exclude-tools", "spawn_pi"];
   if (request.context.model) args.push("--model", `${request.context.model.provider}/${request.context.model.id}`);
   if (request.context.thinkingLevel) args.push("--thinking", request.context.thinkingLevel);
-  if (request.rolePrompt) args.push("--append-system-prompt", `Child role instructions:\n${request.rolePrompt}`);
+  if (rolePromptPath) args.push("--append-system-prompt", rolePromptPath);
   return args;
 }
 

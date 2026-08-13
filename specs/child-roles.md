@@ -225,7 +225,7 @@ export interface StartChildRequest {
 }
 ```
 
-`piArgs()` adds canonical `--model`, `--thinking`, and one `--append-system-prompt` argument when selected. The role prompt argument is prefixed with a literal instruction heading so it cannot match a local path. Herdr receives an argument array; values are never shell-interpolated.
+`piArgs()` adds canonical `--model`, `--thinking`, and one `--append-system-prompt` argument when selected. The role prompt is prefixed with a literal instruction heading, written to a private temporary file, and passed by path so multiline or shell-sensitive content never enters Herdr's shell argument encoding. The temporary file is removed after startup succeeds or fails.
 
 ## Delivery and Verification
 

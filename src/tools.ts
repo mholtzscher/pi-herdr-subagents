@@ -87,7 +87,7 @@ function summarize(result: SpawnBatchResult): string {
   const succeeded = result.results.filter((child) => child.status === "succeeded").length;
   const lines = [`spawn_pi: ${succeeded}/${result.requested} attributed result${succeeded === 1 ? "" : "s"}`];
   for (const child of result.results) {
-    lines.push(`${child.taskId}: ${child.status}${child.sessionId ? ` (session ${child.sessionId})` : ""}`);
+    lines.push(`${child.taskId}: ${child.status}${child.sessionId ? ` (session ${child.sessionId})` : ""}${child.error ? `: ${child.error.message}` : ""}`);
   }
   return lines.join("\n");
 }

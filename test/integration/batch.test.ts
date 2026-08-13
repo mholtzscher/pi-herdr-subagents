@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync, statSync } from "node:fs";
+import { access } from "node:fs/promises";
 import test from "node:test";
 import { ConcurrentBatchRunner } from "../../src/batch.js";
 import { HerdrChildHost, SessionChildRegistry, StartChildError } from "../../src/herdr/host.js";
@@ -50,25 +52,68 @@ test("labels the Parent tab and every visible child surface with its readable Pa
   }
 });
 
-test("passes selected role identity as one non-shell Pi argument", async () => {
+test("passes selected role identity through a private temporary file", async () => {
   const calls: Array<{ method: string; params: Record<string, unknown> }> = [];
+  let promptPath = "";
+  let promptContents = "";
+  let promptMode = 0;
   const server = await createFakeHerdrServer((request) => {
     calls.push(request as { method: string; params: Record<string, unknown> });
     if (request.method === "tab.create") return { tab: { tab_id: "w21:t2" }, root_pane: { pane_id: "w21:p9" } };
-    if (request.method === "agent.start") return {};
+    if (request.method === "agent.start") {
+      const args = (request.params as Record<string, unknown>).args as string[];
+      promptPath = args.at(-1) ?? "";
+      promptContents = readFileSync(promptPath, "utf8");
+      promptMode = statSync(promptPath).mode;
+      return {};
+    }
     return { agent: { terminal_id: "term-1", agent_session: { kind: "path", value: "/missing.jsonl" } } };
   });
   try {
-    await new HerdrChildHost().start({
+    const prompt = "Read only.\n\nPreserve 'quotes' and $variables.";
+    const pending = new HerdrChildHost().start({
       taskId: "task-1" as never,
       placement: "tab",
       sessionId: "child",
       context: parentContext,
-      rolePrompt: "README.md",
+      rolePrompt: prompt,
       parent: { workspaceId: "w21", tabId: "w21:t1", paneId: "w21:p1", socketPath: server.path },
     });
+    await pending;
     const args = calls.find((call) => call.method === "agent.start")?.params.args as string[];
-    assert.deepEqual(args.slice(-2), ["--append-system-prompt", "Child role instructions:\nREADME.md"]);
+    promptPath = args.at(-1) ?? "";
+    assert.equal(args.at(-2), "--append-system-prompt");
+    assert.doesNotMatch(promptPath, /[\r\n]/);
+    await assert.rejects(access(promptPath));
+
+    assert.equal(promptContents, `Child role instructions:\n${prompt}`);
+    assert.equal(promptMode & 0o777, 0o600);
+  } finally {
+    await server.close();
+  }
+});
+
+test("removes the temporary role prompt when child startup fails", async () => {
+  let promptPath = "";
+  const server = await createFakeHerdrServer((request) => {
+    if (request.method === "tab.create") return { tab: { tab_id: "w21:t2" }, root_pane: { pane_id: "w21:p9" } };
+    if (request.method === "agent.start") {
+      const args = (request.params as Record<string, unknown>).args as string[];
+      promptPath = args.at(-1) ?? "";
+      throw new Error("start rejected");
+    }
+    return { agent: { terminal_id: "term-1" } };
+  });
+  try {
+    await assert.rejects(() => new HerdrChildHost().start({
+      taskId: "task-1" as never,
+      placement: "tab",
+      sessionId: "child",
+      context: parentContext,
+      rolePrompt: "Read only.",
+      parent: { workspaceId: "w21", tabId: "w21:t1", paneId: "w21:p1", socketPath: server.path },
+    }), /start rejected/);
+    await assert.rejects(access(promptPath));
   } finally {
     await server.close();
   }

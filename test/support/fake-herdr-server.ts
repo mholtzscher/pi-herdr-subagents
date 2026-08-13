@@ -13,7 +13,11 @@ export async function createFakeHerdrServer(handler: (request: { id: string; met
       const lineEnd = data.indexOf("\n");
       if (lineEnd < 0) return;
       const request = JSON.parse(data.slice(0, lineEnd)) as { id: string; method: string; params: unknown };
-      socket.end(`${JSON.stringify({ id: request.id, result: handler(request) })}\n`);
+      try {
+        socket.end(`${JSON.stringify({ id: request.id, result: handler(request) })}\n`);
+      } catch (error) {
+        socket.end(`${JSON.stringify({ id: request.id, error: { code: "fake_error", message: error instanceof Error ? error.message : String(error) } })}\n`);
+      }
     });
   });
   await new Promise<void>((resolve) => server.listen(path, resolve));
