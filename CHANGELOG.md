@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.2.0](https://github.com/mholtzscher/pi-herdr-subagents/compare/v1.1.1...v1.2.0) (2026-08-13)
+
+
+### Features
+
+* add ordered model configuration fallbacks ([cc2243c](https://github.com/mholtzscher/pi-herdr-subagents/commit/cc2243c090efa1ec34ff74f92aa39c617292b284))
+* add ordered model configuration fallbacks ([b77cf7f](https://github.com/mholtzscher/pi-herdr-subagents/commit/b77cf7f0dee3a0a12c181ee178fc000c72b7190e))
+* add parent orchestrator mode ([6fb1651](https://github.com/mholtzscher/pi-herdr-subagents/commit/6fb1651735d66ad6a1f2090fbbc94d2acb7f17d3))
+* add parent orchestrator mode ([d6d0318](https://github.com/mholtzscher/pi-herdr-subagents/commit/d6d0318d0e2b1470192208d33fd35e360eefe6cd))
+* **spawn:** unify child task display ([d620783](https://github.com/mholtzscher/pi-herdr-subagents/commit/d620783cb21605b7ddc4651ff9fbc747204bb4aa))
+* **spawn:** unify child task display ([494a4af](https://github.com/mholtzscher/pi-herdr-subagents/commit/494a4afe714dd6f919f59d28c631683d6c563912))
+
+
+### Bug Fixes
+
+* allow disabling unavailable orchestrator ([2eb4be3](https://github.com/mholtzscher/pi-herdr-subagents/commit/2eb4be3f05a322696bdc805224439ad50dda4750))
+* **herdr:** clean up readiness abort listeners ([2c3a708](https://github.com/mholtzscher/pi-herdr-subagents/commit/2c3a7088a4928131a9011f95a1ab126c3645d8b4))
+* **herdr:** retry child startup until shell is ready ([e6eac3c](https://github.com/mholtzscher/pi-herdr-subagents/commit/e6eac3ca04da1385b42d22d2960fe8592108212b))
+* **herdr:** retry child startup until shell is ready ([ae32986](https://github.com/mholtzscher/pi-herdr-subagents/commit/ae32986f3f94d54670b86ba6e3a8203ad0fa7417))
+* **herdr:** wait for child shell readiness ([33f89f4](https://github.com/mholtzscher/pi-herdr-subagents/commit/33f89f40fbddac675557381ddb18e48c402dab52))
+* **herdr:** wait for child shell readiness ([3cf43d8](https://github.com/mholtzscher/pi-herdr-subagents/commit/3cf43d8db203344b4049e65cf5f8564f2b8613d6))
+
 ## [1.1.1](https://github.com/mholtzscher/pi-herdr-subagents/compare/v1.1.0...v1.1.1) (2026-08-13)
 
 
