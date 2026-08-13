@@ -36,8 +36,17 @@ test("labels the Parent tab and every visible child surface with its readable Pa
   });
   try {
     const context = { ...parentContext, parentLabel: "Amber Finch" };
-    await new HerdrChildHost().start({ taskId: "task-1" as never, placement: "tab", sessionId: "child", context, parent: { workspaceId: "w21", tabId: "w21:t1", paneId: "w21:p1", socketPath: server.path } });
-    await new HerdrChildHost().renameParent({ workspaceId: "w21", tabId: "w21:t1", paneId: "w21:p1", socketPath: server.path }, context);
+    await new HerdrChildHost().start({
+      taskId: "task-1" as never,
+      placement: "tab",
+      sessionId: "child",
+      context,
+      parent: { workspaceId: "w21", tabId: "w21:t1", paneId: "w21:p1", socketPath: server.path },
+    });
+    await new HerdrChildHost().renameParent(
+      { workspaceId: "w21", tabId: "w21:t1", paneId: "w21:p1", socketPath: server.path },
+      context,
+    );
     const parentTab = calls.find((call) => call.method === "tab.rename");
     const tab = calls.find((call) => call.method === "tab.create");
     const pane = calls.find((call) => call.method === "pane.rename");
@@ -72,13 +81,16 @@ test("retries child startup until the pane and its shell are ready", async () =>
     return { agent: { terminal_id: "term-1", agent_session: { kind: "path", value: "/missing.jsonl" } } };
   });
   try {
-    await new HerdrChildHost().start({
-      taskId: "task-1" as never,
-      placement: "tab",
-      sessionId: "child",
-      context: parentContext,
-      parent: { workspaceId: "w21", tabId: "w21:t1", paneId: "w21:p1", socketPath: server.path },
-    }, controller.signal);
+    await new HerdrChildHost().start(
+      {
+        taskId: "task-1" as never,
+        placement: "tab",
+        sessionId: "child",
+        context: parentContext,
+        parent: { workspaceId: "w21", tabId: "w21:t1", paneId: "w21:p1", socketPath: server.path },
+      },
+      controller.signal,
+    );
     assert.equal(startAttempts, 4);
     assert.equal(getEventListeners(controller.signal, "abort").length, 0);
   } finally {
@@ -139,14 +151,18 @@ test("removes the temporary role prompt when child startup fails", async () => {
     return { agent: { terminal_id: "term-1" } };
   });
   try {
-    await assert.rejects(() => new HerdrChildHost().start({
-      taskId: "task-1" as never,
-      placement: "tab",
-      sessionId: "child",
-      context: parentContext,
-      rolePrompt: "Read only.",
-      parent: { workspaceId: "w21", tabId: "w21:t1", paneId: "w21:p1", socketPath: server.path },
-    }), /start rejected/);
+    await assert.rejects(
+      () =>
+        new HerdrChildHost().start({
+          taskId: "task-1" as never,
+          placement: "tab",
+          sessionId: "child",
+          context: parentContext,
+          rolePrompt: "Read only.",
+          parent: { workspaceId: "w21", tabId: "w21:t1", paneId: "w21:p1", socketPath: server.path },
+        }),
+      /start rejected/,
+    );
     await assert.rejects(access(promptPath));
   } finally {
     await server.close();
@@ -157,9 +173,15 @@ test("does not start children when the Parent tab cannot be renamed", async () =
   const host = new FakeChildHost();
   host.renameError = new Error("tab rename rejected");
 
-  const result = await new ConcurrentBatchRunner(host, new Reader()).run({ tasks: [{ prompt: "one" }, { prompt: "two" }] }, parentContext);
+  const result = await new ConcurrentBatchRunner(host, new Reader()).run(
+    { tasks: [{ prompt: "one" }, { prompt: "two" }] },
+    parentContext,
+  );
 
-  assert.deepEqual(result.results.map((child) => child.status), ["failed", "failed"]);
+  assert.deepEqual(
+    result.results.map((child) => child.status),
+    ["failed", "failed"],
+  );
   assert.equal(host.started.length, 0);
   assert.deepEqual(host.parentLabels, []);
 });
@@ -193,13 +215,15 @@ test("does not close a pane whose Herdr occupant changed", async () => {
   process.env.HERDR_SOCKET_PATH = server.path;
   try {
     const host = new HerdrChildHost();
-    await assert.rejects(() => host.close({
-      taskId: "task-1" as never,
-      sessionId: "child",
-      location: { workspaceId: "w1", tabId: "w1:t2", paneId: "w1:p2" },
-      agentName: "pi_task_1",
-      terminalId: "expected",
-    }));
+    await assert.rejects(() =>
+      host.close({
+        taskId: "task-1" as never,
+        sessionId: "child",
+        location: { workspaceId: "w1", tabId: "w1:t2", paneId: "w1:p2" },
+        agentName: "pi_task_1",
+        terminalId: "expected",
+      }),
+    );
     assert.deepEqual(calls, ["agent.get"]);
   } finally {
     if (originalSocketPath === undefined) delete process.env.HERDR_SOCKET_PATH;
@@ -214,18 +238,29 @@ test("runs four children concurrently, preserves request order, and closes succe
   const start = host.start.bind(host);
   const started = new Set<string>();
   let release!: () => void;
-  const allStarted = new Promise<void>((resolve) => { release = resolve; });
+  const allStarted = new Promise<void>((resolve) => {
+    release = resolve;
+  });
   host.start = async (request) => {
     started.add(request.taskId);
     if (started.size === 4) release();
     await allStarted;
     return start(request);
   };
-  const result = await new ConcurrentBatchRunner(host, new Reader()).run({
-    tasks: [{ prompt: "one" }, { prompt: "two", placement: "split" }, { prompt: "three" }, { prompt: "four" }],
-  }, parentContext);
-  assert.deepEqual(result.results.map((child) => child.taskId), ["task-1", "task-2", "task-3", "task-4"]);
-  assert.deepEqual(result.results.map((child) => child.status), ["succeeded", "succeeded", "succeeded", "succeeded"]);
+  const result = await new ConcurrentBatchRunner(host, new Reader()).run(
+    {
+      tasks: [{ prompt: "one" }, { prompt: "two", placement: "split" }, { prompt: "three" }, { prompt: "four" }],
+    },
+    parentContext,
+  );
+  assert.deepEqual(
+    result.results.map((child) => child.taskId),
+    ["task-1", "task-2", "task-3", "task-4"],
+  );
+  assert.deepEqual(
+    result.results.map((child) => child.status),
+    ["succeeded", "succeeded", "succeeded", "succeeded"],
+  );
   assert.equal(host.closed.length, 4);
   assert.deepEqual(host.parentLabels, ["Pi [w1-p1]"]);
 });
@@ -235,8 +270,14 @@ test("preserves partial failures and blocked children without closing them", asy
   host.sessionPaths.set("task-1" as never, "/tmp/one.jsonl");
   host.promptErrors.set("task-2" as never, new Error("prompt rejected"));
   host.settlements.set("task-3" as never, { status: "blocked" });
-  const result = await new ConcurrentBatchRunner(host, new Reader()).run({ tasks: [{ prompt: "one" }, { prompt: "two" }, { prompt: "three" }] }, parentContext);
-  assert.deepEqual(result.results.map((child) => child.status), ["succeeded", "failed", "blocked"]);
+  const result = await new ConcurrentBatchRunner(host, new Reader()).run(
+    { tasks: [{ prompt: "one" }, { prompt: "two" }, { prompt: "three" }] },
+    parentContext,
+  );
+  assert.deepEqual(
+    result.results.map((child) => child.status),
+    ["succeeded", "failed", "blocked"],
+  );
   assert.equal(host.closed.length, 1);
   assert.equal(result.results[1].error?.code, "prompt_failed");
   assert.equal(result.results[2].error?.code, "blocked");
@@ -269,9 +310,18 @@ test("routes independent tasks while leaving route failures pane-free", async ()
     },
   );
 
-  assert.deepEqual(result.results.map((child) => child.status), ["succeeded", "failed", "failed", "succeeded", "failed"]);
-  assert.deepEqual(result.results.map((child) => child.error?.code), [undefined, "role_not_found", "model_routing_failed", undefined, "model_routing_failed"]);
-  assert.deepEqual(host.started.map((child) => child.taskId), ["task-1", "task-4"]);
+  assert.deepEqual(
+    result.results.map((child) => child.status),
+    ["succeeded", "failed", "failed", "succeeded", "failed"],
+  );
+  assert.deepEqual(
+    result.results.map((child) => child.error?.code),
+    [undefined, "role_not_found", "model_routing_failed", undefined, "model_routing_failed"],
+  );
+  assert.deepEqual(
+    host.started.map((child) => child.taskId),
+    ["task-1", "task-4"],
+  );
   assert.deepEqual(host.startRequests[0].context.model, { provider: "routed", id: "model" });
   assert.equal(host.startRequests[0].context.thinkingLevel, "low");
   assert.equal(host.startRequests[0].rolePrompt, "Read only.");
@@ -287,22 +337,40 @@ test("routes independent tasks while leaving route failures pane-free", async ()
 test("session cleanup closes tracked children but leaves uncertain occupants alone", async () => {
   const host = new FakeChildHost();
   const registry = new SessionChildRegistry();
-  const first = await host.start({ taskId: "task-1" as never, placement: "tab", sessionId: "one", context: parentContext, parent: host.inspection });
-  const second = await host.start({ taskId: "task-2" as never, placement: "tab", sessionId: "two", context: parentContext, parent: host.inspection });
+  const first = await host.start({
+    taskId: "task-1" as never,
+    placement: "tab",
+    sessionId: "one",
+    context: parentContext,
+    parent: host.inspection,
+  });
+  const second = await host.start({
+    taskId: "task-2" as never,
+    placement: "tab",
+    sessionId: "two",
+    context: parentContext,
+    parent: host.inspection,
+  });
   registry.add(first);
   registry.add(second);
   host.closeErrors.set("task-2" as never, new Error("occupant changed"));
 
   await registry.closeAll(host);
 
-  assert.deepEqual(host.closed.map((child) => child.taskId), ["task-1"]);
+  assert.deepEqual(
+    host.closed.map((child) => child.taskId),
+    ["task-1"],
+  );
 });
 
 test("parent abort leaves a started child open", async () => {
   const host = new FakeChildHost();
   host.sessionPaths.set("task-1" as never, "/tmp/one.jsonl");
   let resolvePrompt!: () => void;
-  host.prompt = async () => new Promise((resolve) => { resolvePrompt = () => resolve({ status: "settled" }); });
+  host.prompt = async () =>
+    new Promise((resolve) => {
+      resolvePrompt = () => resolve({ status: "settled" });
+    });
   const controller = new AbortController();
   const pending = new ConcurrentBatchRunner(host, new Reader()).run(
     { tasks: [{ prompt: "one" }] },

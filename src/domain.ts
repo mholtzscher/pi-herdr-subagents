@@ -49,7 +49,14 @@ export interface ChildResult {
   role?: string;
   selection?: Omit<ChildRuntimeSelection, "rolePrompt">;
   error?: {
-    code: "role_not_found" | "model_routing_failed" | "start_failed" | "prompt_failed" | "result_unreadable" | "blocked" | "parent_aborted";
+    code:
+      | "role_not_found"
+      | "model_routing_failed"
+      | "start_failed"
+      | "prompt_failed"
+      | "result_unreadable"
+      | "blocked"
+      | "parent_aborted";
     message: string;
   };
 }

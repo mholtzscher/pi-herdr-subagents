@@ -22,10 +22,18 @@ function harness(configResult: ChildRolesConfigLoadResult, activeTools = ["spawn
   const notifications: Array<{ message: string; level?: string }> = [];
   const statuses: Array<string | undefined> = [];
   const pi = {
-    registerCommand(name: string, command: unknown) { commands.set(name, command); },
-    on(name: string, handler: Handler) { handlers.set(name, [...(handlers.get(name) ?? []), handler]); },
-    appendEntry(customType: string, data: unknown) { appended.push({ customType, data }); },
-    getActiveTools() { return activeTools; },
+    registerCommand(name: string, command: unknown) {
+      commands.set(name, command);
+    },
+    on(name: string, handler: Handler) {
+      handlers.set(name, [...(handlers.get(name) ?? []), handler]);
+    },
+    appendEntry(customType: string, data: unknown) {
+      appended.push({ customType, data });
+    },
+    getActiveTools() {
+      return activeTools;
+    },
   } as unknown as ExtensionAPI;
   const ctx = {
     hasUI: true,
@@ -88,7 +96,10 @@ test("finds the latest session-wide state and reads it from JSONL", () => {
   const directory = mkdtempSync(join(tmpdir(), "orchestrator-"));
   const path = join(directory, "session.jsonl");
   try {
-    writeFileSync(path, [JSON.stringify({ type: "session" }), "malformed", ...entries.map((entry) => JSON.stringify(entry))].join("\n"));
+    writeFileSync(
+      path,
+      [JSON.stringify({ type: "session" }), "malformed", ...entries.map((entry) => JSON.stringify(entry))].join("\n"),
+    );
     assert.equal(readOrchestratorState(path), false);
   } finally {
     rmSync(directory, { recursive: true, force: true });
@@ -101,7 +112,9 @@ test("uses the configured default, persists it, injects instructions, and toggle
     h.emit("session_start", { reason: "new" });
     assert.deepEqual(h.appended, [{ customType: ORCHESTRATOR_STATE_ENTRY, data: { enabled: true } }]);
     assert.equal(h.statuses.at(-1), "orchestrator");
-    assert.deepEqual(h.emit("before_agent_start", { systemPrompt: "base" }), { systemPrompt: `base\n\n${ORCHESTRATOR_INSTRUCTIONS}` });
+    assert.deepEqual(h.emit("before_agent_start", { systemPrompt: "base" }), {
+      systemPrompt: `base\n\n${ORCHESTRATOR_INSTRUCTIONS}`,
+    });
 
     await h.command.handler("off", h.ctx);
     assert.deepEqual(h.appended.at(-1), { customType: ORCHESTRATOR_STATE_ENTRY, data: { enabled: false } });
@@ -118,18 +131,23 @@ test("restores state across branches and forks inherit the source session curren
     const directory = mkdtempSync(join(tmpdir(), "orchestrator-fork-"));
     const source = join(directory, "source.jsonl");
     try {
-      writeFileSync(source, [
-        JSON.stringify({ type: "session" }),
-        JSON.stringify({ type: "custom", customType: ORCHESTRATOR_STATE_ENTRY, data: { enabled: false } }),
-        JSON.stringify({ type: "custom", customType: ORCHESTRATOR_STATE_ENTRY, data: { enabled: true } }),
-      ].join("\n"));
+      writeFileSync(
+        source,
+        [
+          JSON.stringify({ type: "session" }),
+          JSON.stringify({ type: "custom", customType: ORCHESTRATOR_STATE_ENTRY, data: { enabled: false } }),
+          JSON.stringify({ type: "custom", customType: ORCHESTRATOR_STATE_ENTRY, data: { enabled: true } }),
+        ].join("\n"),
+      );
       const h = harness({ ...enabledConfig, config: { ...enabledConfig.config, orchestrator: { enabled: false } } });
       (h.ctx.sessionManager as { getEntries: () => unknown[] }).getEntries = () => [
         { type: "custom", customType: ORCHESTRATOR_STATE_ENTRY, data: { enabled: false } },
       ];
       h.emit("session_start", { reason: "fork", previousSessionFile: source });
       assert.deepEqual(h.appended.at(-1), { customType: ORCHESTRATOR_STATE_ENTRY, data: { enabled: true } });
-      assert.deepEqual(h.emit("before_agent_start", { systemPrompt: "base" }), { systemPrompt: `base\n\n${ORCHESTRATOR_INSTRUCTIONS}` });
+      assert.deepEqual(h.emit("before_agent_start", { systemPrompt: "base" }), {
+        systemPrompt: `base\n\n${ORCHESTRATOR_INSTRUCTIONS}`,
+      });
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
@@ -159,7 +177,9 @@ test("keeps enabled preference while spawn_pi is temporarily inactive", async ()
     h.emit("session_start", { reason: "resume" });
     assert.equal(h.emit("before_agent_start", { systemPrompt: "base" }), undefined);
     activeTools.push("spawn_pi");
-    assert.deepEqual(h.emit("before_agent_start", { systemPrompt: "base" }), { systemPrompt: `base\n\n${ORCHESTRATOR_INSTRUCTIONS}` });
+    assert.deepEqual(h.emit("before_agent_start", { systemPrompt: "base" }), {
+      systemPrompt: `base\n\n${ORCHESTRATOR_INSTRUCTIONS}`,
+    });
   });
 });
 

@@ -23,14 +23,16 @@ export function findOrchestratorState(entries: readonly SessionEntry[]): boolean
 
 export function readOrchestratorState(path: string): boolean | undefined {
   try {
-    const entries = readFileSync(path, "utf8").split("\n").flatMap((line): SessionEntry[] => {
-      if (!line.trim()) return [];
-      try {
-        return [JSON.parse(line) as SessionEntry];
-      } catch {
-        return [];
-      }
-    });
+    const entries = readFileSync(path, "utf8")
+      .split("\n")
+      .flatMap((line): SessionEntry[] => {
+        if (!line.trim()) return [];
+        try {
+          return [JSON.parse(line) as SessionEntry];
+        } catch {
+          return [];
+        }
+      });
     return findOrchestratorState(entries);
   } catch {
     return undefined;
@@ -73,7 +75,10 @@ export function registerOrchestrator(pi: ExtensionAPI, configResult: ChildRolesC
     handler: async (args, ctx) => {
       const action = args.trim().toLowerCase() || "toggle";
       if (action === "status") {
-        ctx.ui.notify(available() ? `Orchestrator mode is ${enabled ? "enabled" : "disabled"}.` : unavailableMessage(configResult), available() ? "info" : "warning");
+        ctx.ui.notify(
+          available() ? `Orchestrator mode is ${enabled ? "enabled" : "disabled"}.` : unavailableMessage(configResult),
+          available() ? "info" : "warning",
+        );
         return;
       }
       if (action === "off") return setEnabled(false, ctx);
@@ -97,9 +102,10 @@ export function registerOrchestrator(pi: ExtensionAPI, configResult: ChildRolesC
     delete shared[FORK_HANDOFF_KEY];
     const entries = ctx.sessionManager.getEntries();
     const stored = findOrchestratorState(entries);
-    const fileHandoff = event.reason === "fork" && event.previousSessionFile
-      ? readOrchestratorState(event.previousSessionFile)
-      : undefined;
+    const fileHandoff =
+      event.reason === "fork" && event.previousSessionFile
+        ? readOrchestratorState(event.previousSessionFile)
+        : undefined;
     const inherited = memoryHandoff ?? fileHandoff;
     enabled = inherited ?? stored ?? (configResult.ok ? configResult.config.orchestrator.enabled : false);
 
@@ -120,11 +126,13 @@ export function registerOrchestrator(pi: ExtensionAPI, configResult: ChildRolesC
 }
 
 function hasHerdrParentEnvironment(): boolean {
-  return process.env.HERDR_ENV === "1"
-    && Boolean(process.env.HERDR_WORKSPACE_ID)
-    && Boolean(process.env.HERDR_TAB_ID)
-    && Boolean(process.env.HERDR_PANE_ID)
-    && Boolean(process.env.HERDR_SOCKET_PATH);
+  return (
+    process.env.HERDR_ENV === "1" &&
+    Boolean(process.env.HERDR_WORKSPACE_ID) &&
+    Boolean(process.env.HERDR_TAB_ID) &&
+    Boolean(process.env.HERDR_PANE_ID) &&
+    Boolean(process.env.HERDR_SOCKET_PATH)
+  );
 }
 
 function unavailableMessage(configResult: ChildRolesConfigLoadResult): string {

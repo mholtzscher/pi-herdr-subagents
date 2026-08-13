@@ -9,7 +9,12 @@ const parent = { cwd: "/repo", model: { provider: "parent", id: "unavailable" },
 const config = {
   defaults: { model: "default/model", thinking: "medium" as const },
   roles: {
-    explore: { prompt: "Explore the repository.", description: "Read-only exploration", model: "role/model", thinking: "low" as const },
+    explore: {
+      prompt: "Explore the repository.",
+      description: "Read-only exploration",
+      model: "role/model",
+      thinking: "low" as const,
+    },
   },
 };
 
@@ -18,11 +23,14 @@ function errorOf(result: ReturnType<typeof loadChildRolesConfig>): string {
   return result.error;
 }
 
-function resolve(task: Parameters<typeof resolveChildRuntime>[0]["task"], availableModels = [
-  { provider: "default", id: "model" },
-  { provider: "role", id: "model" },
-  { provider: "explicit", id: "nested/model" },
-]) {
+function resolve(
+  task: Parameters<typeof resolveChildRuntime>[0]["task"],
+  availableModels = [
+    { provider: "default", id: "model" },
+    { provider: "role", id: "model" },
+    { provider: "explicit", id: "nested/model" },
+  ],
+) {
   return resolveChildRuntime({ task, parent, routing: { config, availableModels } });
 }
 
@@ -30,8 +38,19 @@ test("loads missing config as empty and validates the complete config shape", ()
   const directory = mkdtempSync(join(tmpdir(), "child-roles-"));
   const path = join(directory, "herdr-subagents.json");
   try {
-    assert.deepEqual(loadChildRolesConfig(path), { ok: true, path, config: { orchestrator: { enabled: false }, defaults: {}, roles: {} } });
-    writeFileSync(path, JSON.stringify({ orchestrator: { enabled: true }, defaults: { model: "provider/a/b" }, roles: { explore: { prompt: "Explore.", model: ["provider/first", "provider/a/b"] } } }));
+    assert.deepEqual(loadChildRolesConfig(path), {
+      ok: true,
+      path,
+      config: { orchestrator: { enabled: false }, defaults: {}, roles: {} },
+    });
+    writeFileSync(
+      path,
+      JSON.stringify({
+        orchestrator: { enabled: true },
+        defaults: { model: "provider/a/b" },
+        roles: { explore: { prompt: "Explore.", model: ["provider/first", "provider/a/b"] } },
+      }),
+    );
     const loaded = loadChildRolesConfig(path);
     assert.equal(loaded.ok, true);
     if (loaded.ok) {
@@ -116,12 +135,21 @@ test("uses the first available candidate from the highest-precedence model layer
         defaults: { model: ["default/missing", "default/model"] },
         roles: { explore: { prompt: "Explore.", model: ["role/missing", "role/a/b"] } },
       },
-      availableModels: [{ provider: "default", id: "model" }, { provider: "role", id: "a/b" }],
+      availableModels: [
+        { provider: "default", id: "model" },
+        { provider: "role", id: "a/b" },
+      ],
     },
   });
   assert.deepEqual(routed, {
     ok: true,
-    selection: { model: { provider: "role", id: "a/b" }, modelSource: "role", thinkingLevel: "high", thinkingSource: "parent", rolePrompt: "Explore." },
+    selection: {
+      model: { provider: "role", id: "a/b" },
+      modelSource: "role",
+      thinkingLevel: "high",
+      thinkingSource: "parent",
+      rolePrompt: "Explore.",
+    },
   });
 
   const defaultRouted = resolveChildRuntime({
@@ -179,7 +207,12 @@ test("keeps role prompts and model mappings out of guidance and routing errors",
     task: { prompt: "inspect", role: "explore" },
     parent,
     routing: {
-      config: { defaults: {}, roles: { explore: { prompt: "Explore the repository.", model: ["private/first", "private/model"], thinking: "low" } } },
+      config: {
+        defaults: {},
+        roles: {
+          explore: { prompt: "Explore the repository.", model: ["private/first", "private/model"], thinking: "low" },
+        },
+      },
       availableModels: [],
     },
   });

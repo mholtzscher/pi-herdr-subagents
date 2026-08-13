@@ -23,7 +23,10 @@ export interface BatchRunner {
 }
 
 export class ConcurrentBatchRunner implements BatchRunner {
-  constructor(private readonly host: ChildHost, private readonly reader: ChildResultReader) {}
+  constructor(
+    private readonly host: ChildHost,
+    private readonly reader: ChildResultReader,
+  ) {}
 
   async run(
     request: SpawnBatchRequest,
@@ -69,10 +72,18 @@ export class ConcurrentBatchRunner implements BatchRunner {
       truncated: false,
       paneClosed: false,
       ...(task.role === undefined ? {} : { role: task.role }),
-      ...(resolution.ok ? { selection: visibleSelection(resolution.selection) } : resolution.selection ? { selection: resolution.selection } : {}),
+      ...(resolution.ok
+        ? { selection: visibleSelection(resolution.selection) }
+        : resolution.selection
+          ? { selection: resolution.selection }
+          : {}),
     };
     if (!resolution.ok) {
-      const result: ChildResult = { ...base, status: "failed", error: { code: resolution.code, message: resolution.message } };
+      const result: ChildResult = {
+        ...base,
+        status: "failed",
+        error: { code: resolution.code, message: resolution.message },
+      };
       onComplete();
       return result;
     }
@@ -83,14 +94,17 @@ export class ConcurrentBatchRunner implements BatchRunner {
     };
     let child;
     try {
-      child = await this.host.start({
-        taskId,
-        placement: task.placement ?? "tab",
-        sessionId: randomUUID(),
-        context: childContext,
-        rolePrompt: resolution.selection.rolePrompt,
-        parent,
-      }, signal);
+      child = await this.host.start(
+        {
+          taskId,
+          placement: task.placement ?? "tab",
+          sessionId: randomUUID(),
+          context: childContext,
+          rolePrompt: resolution.selection.rolePrompt,
+          parent,
+        },
+        signal,
+      );
     } catch (error) {
       const childFields = fieldsForStartError(error);
       const result: ChildResult = {
@@ -105,7 +119,9 @@ export class ConcurrentBatchRunner implements BatchRunner {
       return result;
     }
     const childFields = { sessionId: child.sessionId, sessionPath: child.sessionPath, location: child.location };
-    const settlement = await raceAbort(this.host.prompt(child, childPrompt(taskId, task)), signal).catch((error) => ({ error }));
+    const settlement = await raceAbort(this.host.prompt(child, childPrompt(taskId, task)), signal).catch((error) => ({
+      error,
+    }));
     if (!settlement) {
       const result: ChildResult = {
         ...base,
@@ -117,22 +133,42 @@ export class ConcurrentBatchRunner implements BatchRunner {
       return result;
     }
     if ("error" in settlement) {
-      const result: ChildResult = { ...base, ...childFields, status: "failed", error: { code: "prompt_failed", message: messageOf(settlement.error) } };
+      const result: ChildResult = {
+        ...base,
+        ...childFields,
+        status: "failed",
+        error: { code: "prompt_failed", message: messageOf(settlement.error) },
+      };
       onComplete();
       return result;
     }
     if (settlement.status === "blocked") {
-      const result: ChildResult = { ...base, ...childFields, status: "blocked", error: { code: "blocked", message: "Child requires input and remains open" } };
+      const result: ChildResult = {
+        ...base,
+        ...childFields,
+        status: "blocked",
+        error: { code: "blocked", message: "Child requires input and remains open" },
+      };
       onComplete();
       return result;
     }
     if (!child.sessionPath) {
-      const result: ChildResult = { ...base, ...childFields, status: "unattributable", error: { code: "result_unreadable", message: "Child session path was not reported" } };
+      const result: ChildResult = {
+        ...base,
+        ...childFields,
+        status: "unattributable",
+        error: { code: "result_unreadable", message: "Child session path was not reported" },
+      };
       onComplete();
       return result;
     }
     try {
-      const answer = await this.reader.read({ sessionPath: child.sessionPath, taskId, baselineEntryId: child.baselineEntryId, maxChars: 20_000 });
+      const answer = await this.reader.read({
+        sessionPath: child.sessionPath,
+        taskId,
+        baselineEntryId: child.baselineEntryId,
+        maxChars: 20_000,
+      });
       let paneClosed = false;
       try {
         await this.host.close(child);
@@ -140,11 +176,23 @@ export class ConcurrentBatchRunner implements BatchRunner {
       } catch {
         // The answer is already attributed; a changed or unavailable occupant must remain visible.
       }
-      const result: ChildResult = { ...base, ...childFields, status: "succeeded", summary: answer.summary, truncated: answer.truncated, paneClosed };
+      const result: ChildResult = {
+        ...base,
+        ...childFields,
+        status: "succeeded",
+        summary: answer.summary,
+        truncated: answer.truncated,
+        paneClosed,
+      };
       onComplete();
       return result;
     } catch (error) {
-      const result: ChildResult = { ...base, ...childFields, status: "unattributable", error: { code: "result_unreadable", message: messageOf(error) } };
+      const result: ChildResult = {
+        ...base,
+        ...childFields,
+        status: "unattributable",
+        error: { code: "result_unreadable", message: messageOf(error) },
+      };
       onComplete();
       return result;
     }
@@ -198,7 +246,9 @@ async function raceAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<
   });
 }
 
-function visibleSelection(selection: import("./domain.js").ChildRuntimeSelection): Omit<import("./domain.js").ChildRuntimeSelection, "rolePrompt"> {
+function visibleSelection(
+  selection: import("./domain.js").ChildRuntimeSelection,
+): Omit<import("./domain.js").ChildRuntimeSelection, "rolePrompt"> {
   const { rolePrompt: _, ...visible } = selection;
   return visible;
 }

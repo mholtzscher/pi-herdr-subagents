@@ -38,7 +38,9 @@ export class JsonlChildResultReader implements ChildResultReader {
 
     const entries = parseEntries(raw);
     const marker = `<!-- pi-herdr-task:${input.taskId} -->`;
-    const marked = entries.filter((entry) => entry.message?.role === "user" && textOf(entry.message.content).includes(marker));
+    const marked = entries.filter(
+      (entry) => entry.message?.role === "user" && textOf(entry.message.content).includes(marker),
+    );
     if (marked.length !== 1 || !marked[0].id) throw new ResultAttributionError("Task marker is missing or ambiguous");
     const task = marked[0];
     const taskEntryId = task.id!;
@@ -100,8 +102,12 @@ function textOf(content: unknown): string {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
   return content
-    .filter((block): block is { type: string; text: string } =>
-      Boolean(block) && typeof block === "object" && (block as { type?: unknown }).type === "text" && typeof (block as { text?: unknown }).text === "string",
+    .filter(
+      (block): block is { type: string; text: string } =>
+        Boolean(block) &&
+        typeof block === "object" &&
+        (block as { type?: unknown }).type === "text" &&
+        typeof (block as { text?: unknown }).text === "string",
     )
     .map((block) => block.text)
     .join("");
