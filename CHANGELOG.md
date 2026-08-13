@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/mholtzscher/pi-herdr-subagents/compare/v1.1.0...v1.1.1) (2026-08-13)
+
+
+### Bug Fixes
+
+* **herdr:** pass role prompts via private temp file to avoid shell arg encoding ([3a44f8a](https://github.com/mholtzscher/pi-herdr-subagents/commit/3a44f8a284ed4d8c01ea24146f3d35aaa196d2c7))
+
 ## [1.1.0](https://github.com/mholtzscher/pi-herdr-subagents/compare/v1.0.0...v1.1.0) (2026-08-13)
 
 
