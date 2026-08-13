@@ -4,6 +4,7 @@ import { HerdrChildHost, SessionChildRegistry } from "./herdr/host.js";
 import { loadOrCreateParentLabel, PARENT_LABEL_ENTRY } from "./parent-label.js";
 import { JsonlChildResultReader } from "./results.js";
 import { loadChildRolesConfig } from "./model-routing.js";
+import { registerOrchestrator } from "./orchestrator.js";
 import { registerSpawnPiTool } from "./tools.js";
 
 export default function (pi: ExtensionAPI): void {
@@ -22,6 +23,7 @@ export default function (pi: ExtensionAPI): void {
     if (!parentLabel) throw new Error("Parent label is unavailable before session start");
     return parentLabel;
   }, childRolesConfig);
+  registerOrchestrator(pi, childRolesConfig);
 
   pi.on("session_shutdown", async (event) => {
     if (event.reason === "reload") return;

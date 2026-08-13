@@ -20,8 +20,12 @@ export interface ChildRolesConfig {
   roles: Record<string, ChildRole>;
 }
 
+export interface HerdrSubagentsConfig extends ChildRolesConfig {
+  orchestrator: { enabled: boolean };
+}
+
 export type ChildRolesConfigLoadResult =
-  | { ok: true; path: string; config: ChildRolesConfig }
+  | { ok: true; path: string; config: HerdrSubagentsConfig }
   | { ok: false; path: string; error: string };
 
 export interface ModelRoutingContext {
@@ -40,7 +44,7 @@ export type ChildRuntimeResolution =
 
 const THINKING_LEVELS = new Set<ChildThinkingLevel>(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 export function loadChildRolesConfig(path = join(getAgentDir(), "herdr-subagents.json")): ChildRolesConfigLoadResult {
-  if (!existsSync(path)) return { ok: true, path, config: { defaults: {}, roles: {} } };
+  if (!existsSync(path)) return { ok: true, path, config: { orchestrator: { enabled: false }, defaults: {}, roles: {} } };
   try {
     return { ok: true, path, config: parseConfig(JSON.parse(readFileSync(path, "utf8"))) };
   } catch (error) {
@@ -98,16 +102,24 @@ export function roleGuidance(config: ChildRolesConfig): string | undefined {
   return `Configured Child Roles: ${roles.map(([name, role]) => role.description ? `${name} (${role.description})` : name).join("; ")}`;
 }
 
-function parseConfig(value: unknown): ChildRolesConfig {
+function parseConfig(value: unknown): HerdrSubagentsConfig {
   if (!isRecord(value)) throw new Error("config must be an object");
-  rejectUnsupported(value, ["defaults", "roles"], "config");
+  rejectUnsupported(value, ["orchestrator", "defaults", "roles"], "config");
+  const orchestrator = value.orchestrator === undefined ? { enabled: false } : parseOrchestrator(value.orchestrator);
   const defaults = value.defaults === undefined ? {} : parseDefaults(value.defaults, "defaults");
   if (value.roles !== undefined && !isRecord(value.roles)) throw new Error("roles must be an object");
   const roles = Object.fromEntries(Object.entries(value.roles ?? {}).map(([name, role]) => {
     if (!nonWhitespace(name)) throw new Error("role names must be non-whitespace strings");
     return [name, parseRole(role, `roles.${JSON.stringify(name)}`)];
   }));
-  return { defaults, roles };
+  return { orchestrator, defaults, roles };
+}
+
+function parseOrchestrator(value: unknown): { enabled: boolean } {
+  if (!isRecord(value)) throw new Error("orchestrator must be an object");
+  rejectUnsupported(value, ["enabled"], "orchestrator");
+  if (typeof value.enabled !== "boolean") throw new Error("orchestrator.enabled must be a boolean");
+  return { enabled: value.enabled };
 }
 
 function parseDefaults(value: unknown, name: string): ChildRuntimeDefaults {
