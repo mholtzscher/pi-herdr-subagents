@@ -106,7 +106,7 @@ export function registerSpawnPiTool(
       const header =
         details.phase === "working"
           ? `working · ${details.progress.completed} of ${details.progress.total} settled`
-          : `${displayLabel(state)} · ${successfulCount(details.result)} of ${details.result.requested} complete`;
+          : `${stateIcon(state)} ${finalBatchStatus(details.result, state)}`;
       const lines = [theme.fg(stateColor(state), header)];
       for (let requestIndex = 0; requestIndex < total; requestIndex += 1) {
         const task = tasks?.[requestIndex];
@@ -162,13 +162,13 @@ function summarizeProgress(progress: BatchProgress): string {
 
 function summarize(result: SpawnBatchResult): string {
   const details: SpawnPiDisplayDetails = { phase: "finished", result };
-  const lines = [
-    `spawn_pi: ${displayLabel(batchDisplayState(details))} · ${successfulCount(result)} of ${result.requested} complete`,
-  ];
+  const batchState = batchDisplayState(details);
+  const lines = [`spawn_pi: ${stateIcon(batchState)} ${finalBatchStatus(result, batchState)}`];
   for (const child of orderedResults(result.results)) {
     const state = childDisplayState(child);
     const role = presentationRole(child.role);
-    let line = `${child.taskId}${role ? ` [${role}]` : ""}: ${displayLabel(state)}`;
+    let line = `${stateIcon(state)} ${child.taskId}${role ? ` [${role}]` : ""}`;
+    if (state !== "complete") line += `: ${displayLabel(state)}`;
     const reason = shortReason(child);
     if (reason) line += ` · ${reason}`;
     if (child.sessionId) line += ` · session ${child.sessionId}`;
@@ -187,8 +187,8 @@ function renderChild(
 ): string {
   const state = childDisplayState(result);
   const role = presentationRole(requestedRole);
-  const icon = state === "working" ? "◌" : state === "complete" ? "✓" : state === "needs_input" ? "!" : "×";
-  let line = `${theme.fg(stateColor(state), icon)} ${theme.fg("toolTitle", taskId)}${role ? theme.fg("muted", ` [${role}]`) : ""} ${theme.fg(stateColor(state), displayLabel(state))}`;
+  let line = `${theme.fg(stateColor(state), stateIcon(state))} ${theme.fg("toolTitle", taskId)}${role ? theme.fg("muted", ` [${role}]`) : ""}`;
+  if (state !== "complete") line += ` ${theme.fg(stateColor(state), displayLabel(state))}`;
   const reason = result && shortReason(result);
   if (state === "incomplete" && reason) line += theme.fg("muted", ` · ${reason}`);
   const location = result && !result.paneClosed ? locationText(result) : undefined;
@@ -260,6 +260,13 @@ function successfulCount(result: SpawnBatchResult | undefined): number {
   return result?.results.filter((child) => isChildResult(child) && child.status === "succeeded").length ?? 0;
 }
 
+function finalBatchStatus(result: SpawnBatchResult, state: BatchDisplayState): string {
+  const completed = successfulCount(result);
+  if (state === "complete")
+    return `${completed} of ${result.requested} ${result.requested === 1 ? "task" : "tasks"} complete`;
+  return `${displayLabel(state)} · ${completed} of ${result.requested} complete`;
+}
+
 function orderedResults(results: ChildResult[]): ChildResult[] {
   return [...results].sort((left, right) => left.requestIndex - right.requestIndex);
 }
@@ -284,6 +291,10 @@ function locationText(result: ChildResult): string | undefined {
 
 function displayLabel(state: ChildDisplayState | BatchDisplayState): string {
   return state === "needs_input" ? "needs input" : state;
+}
+
+function stateIcon(state: ChildDisplayState | BatchDisplayState): string {
+  return state === "working" ? "◌" : state === "complete" ? "✓" : state === "needs_input" ? "!" : "×";
 }
 
 function stateColor(state: ChildDisplayState | BatchDisplayState): ThemeColor {
