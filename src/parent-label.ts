@@ -12,7 +12,11 @@ export function findParentLabel(entries: readonly SessionEntry[]): string | unde
   }
 }
 
-export function loadOrCreateParentLabel(entries: readonly SessionEntry[], persist: (label: string) => void, generate = createNameId): string {
+export function loadOrCreateParentLabel(
+  entries: readonly SessionEntry[],
+  persist: (label: string) => void,
+  generate = createNameId,
+): string {
   const stored = findParentLabel(entries);
   if (stored) return stored;
   const label = generate();
@@ -21,5 +25,11 @@ export function loadOrCreateParentLabel(entries: readonly SessionEntry[], persis
 }
 
 function isParentLabel(value: unknown): value is { label: string } {
-  return typeof value === "object" && value !== null && "label" in value && typeof value.label === "string" && value.label.length > 0;
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "label" in value &&
+    typeof value.label === "string" &&
+    value.label.length > 0
+  );
 }

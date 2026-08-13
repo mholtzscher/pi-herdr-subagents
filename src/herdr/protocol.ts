@@ -5,7 +5,10 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 
 export class HerdrProtocolError extends Error {
-  constructor(public readonly code: string, message: string) {
+  constructor(
+    public readonly code: string,
+    message: string,
+  ) {
     super(message);
   }
 }
@@ -41,7 +44,9 @@ export class HerdrSocketClient {
         if (response.id !== requestId) return;
         const error = response.error;
         if (error) {
-          finish(() => reject(new HerdrProtocolError(error.code ?? "server_error", error.message ?? "Herdr request failed")));
+          finish(() =>
+            reject(new HerdrProtocolError(error.code ?? "server_error", error.message ?? "Herdr request failed")),
+          );
           return;
         }
         finish(() => resolve(response.result as T));

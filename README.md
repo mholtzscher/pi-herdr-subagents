@@ -62,7 +62,7 @@ With [devenv](https://devenv.sh/) installed, enter the Node.js 22 development sh
 
 ```bash
 devenv shell
-npm install
+pnpm install
 ```
 
 With direnv installed, allow the included `.envrc` to activate the environment automatically:
@@ -77,10 +77,10 @@ Run the same checks as CI:
 devenv test
 ```
 
-Without devenv, use a local Node.js 22 installation:
+Without devenv, use local Node.js 22 and pnpm installations:
 
 ```bash
-npm install
-npm run check
-npm test
+pnpm install
+pnpm check
+pnpm test
 ```

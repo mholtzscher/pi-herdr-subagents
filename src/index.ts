@@ -19,10 +19,15 @@ export default function (pi: ExtensionAPI): void {
     });
   });
 
-  registerSpawnPiTool(pi, new ConcurrentBatchRunner(host, new JsonlChildResultReader()), () => {
-    if (!parentLabel) throw new Error("Parent label is unavailable before session start");
-    return parentLabel;
-  }, childRolesConfig);
+  registerSpawnPiTool(
+    pi,
+    new ConcurrentBatchRunner(host, new JsonlChildResultReader()),
+    () => {
+      if (!parentLabel) throw new Error("Parent label is unavailable before session start");
+      return parentLabel;
+    },
+    childRolesConfig,
+  );
   registerOrchestrator(pi, childRolesConfig);
 
   pi.on("session_shutdown", async (event) => {

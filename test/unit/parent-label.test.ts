@@ -10,7 +10,13 @@ test("reuses the latest stored internal Parent label", () => {
   ];
   let persisted = false;
 
-  const label = loadOrCreateParentLabel(entries, () => { persisted = true; }, () => "generated-parent");
+  const label = loadOrCreateParentLabel(
+    entries,
+    () => {
+      persisted = true;
+    },
+    () => "generated-parent",
+  );
 
   assert.equal(findParentLabel(entries), "latest-parent");
   assert.equal(label, "latest-parent");
@@ -20,7 +26,13 @@ test("reuses the latest stored internal Parent label", () => {
 test("persists a generated Parent label when none exists", () => {
   let persisted: string | undefined;
 
-  const label = loadOrCreateParentLabel([], (value) => { persisted = value; }, () => "calm-otter");
+  const label = loadOrCreateParentLabel(
+    [],
+    (value) => {
+      persisted = value;
+    },
+    () => "calm-otter",
+  );
 
   assert.equal(label, "calm-otter");
   assert.equal(persisted, "calm-otter");

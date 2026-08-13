@@ -44,7 +44,8 @@ export type ChildRuntimeResolution =
 
 const THINKING_LEVELS = new Set<ChildThinkingLevel>(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 export function loadChildRolesConfig(path = join(getAgentDir(), "herdr-subagents.json")): ChildRolesConfigLoadResult {
-  if (!existsSync(path)) return { ok: true, path, config: { orchestrator: { enabled: false }, defaults: {}, roles: {} } };
+  if (!existsSync(path))
+    return { ok: true, path, config: { orchestrator: { enabled: false }, defaults: {}, roles: {} } };
   try {
     return { ok: true, path, config: parseConfig(JSON.parse(readFileSync(path, "utf8"))) };
   } catch (error) {
@@ -64,9 +65,19 @@ export function resolveChildRuntime(input: {
     return { ok: false, code: "role_not_found", message: `Child role ${JSON.stringify(roleName)} is not configured` };
   }
 
-  const modelChoice = select<ConfiguredModel>(input.task.model, role?.model, input.routing.config.defaults.model, input.parent.model && `${input.parent.model.provider}/${input.parent.model.id}`);
+  const modelChoice = select<ConfiguredModel>(
+    input.task.model,
+    role?.model,
+    input.routing.config.defaults.model,
+    input.parent.model && `${input.parent.model.provider}/${input.parent.model.id}`,
+  );
   const selectedModel = selectAvailableModel(modelChoice, input.routing.availableModels);
-  const thinkingChoice = select(input.task.thinking, role?.thinking, input.routing.config.defaults.thinking, input.parent.thinkingLevel);
+  const thinkingChoice = select(
+    input.task.thinking,
+    role?.thinking,
+    input.routing.config.defaults.thinking,
+    input.parent.thinkingLevel,
+  );
   const selection: ChildRuntimeSelection = {
     ...(selectedModel ? { model: selectedModel, modelSource: modelChoice.source } : {}),
     ...(thinkingChoice.value ? { thinkingLevel: thinkingChoice.value, thinkingSource: thinkingChoice.source } : {}),
@@ -99,7 +110,7 @@ export function resolveChildRuntime(input: {
 export function roleGuidance(config: ChildRolesConfig): string | undefined {
   const roles = Object.entries(config.roles);
   if (!roles.length) return undefined;
-  return `Configured Child Roles: ${roles.map(([name, role]) => role.description ? `${name} (${role.description})` : name).join("; ")}`;
+  return `Configured Child Roles: ${roles.map(([name, role]) => (role.description ? `${name} (${role.description})` : name)).join("; ")}`;
 }
 
 function parseConfig(value: unknown): HerdrSubagentsConfig {
@@ -108,10 +119,12 @@ function parseConfig(value: unknown): HerdrSubagentsConfig {
   const orchestrator = value.orchestrator === undefined ? { enabled: false } : parseOrchestrator(value.orchestrator);
   const defaults = value.defaults === undefined ? {} : parseDefaults(value.defaults, "defaults");
   if (value.roles !== undefined && !isRecord(value.roles)) throw new Error("roles must be an object");
-  const roles = Object.fromEntries(Object.entries(value.roles ?? {}).map(([name, role]) => {
-    if (!nonWhitespace(name)) throw new Error("role names must be non-whitespace strings");
-    return [name, parseRole(role, `roles.${JSON.stringify(name)}`)];
-  }));
+  const roles = Object.fromEntries(
+    Object.entries(value.roles ?? {}).map(([name, role]) => {
+      if (!nonWhitespace(name)) throw new Error("role names must be non-whitespace strings");
+      return [name, parseRole(role, `roles.${JSON.stringify(name)}`)];
+    }),
+  );
   return { orchestrator, defaults, roles };
 }
 
@@ -135,7 +148,8 @@ function parseRole(value: unknown, name: string): ChildRole {
   if (!isRecord(value)) throw new Error(`${name} must be an object`);
   rejectUnsupported(value, ["description", "prompt", "model", "thinking"], name);
   if (!nonWhitespace(value.prompt)) throw new Error(`${name}.prompt must be a non-whitespace string`);
-  if (value.description !== undefined && !nonWhitespace(value.description)) throw new Error(`${name}.description must be a non-whitespace string`);
+  if (value.description !== undefined && !nonWhitespace(value.description))
+    throw new Error(`${name}.description must be a non-whitespace string`);
   return {
     prompt: value.prompt,
     ...(value.description === undefined ? {} : { description: value.description }),
@@ -153,12 +167,14 @@ function validateModel(value: unknown, name: string): ConfiguredModel {
 }
 
 function validateModelReference(value: unknown, name: string): string {
-  if (!nonWhitespace(value) || value !== value.trim() || !parseModel(value)) throw new Error(`${name} must be an exact provider/model-id`);
+  if (!nonWhitespace(value) || value !== value.trim() || !parseModel(value))
+    throw new Error(`${name} must be an exact provider/model-id`);
   return value;
 }
 
 function validateThinking(value: unknown, name: string): ChildThinkingLevel {
-  if (typeof value !== "string" || !THINKING_LEVELS.has(value as ChildThinkingLevel)) throw new Error(`${name} must be one of ${Array.from(THINKING_LEVELS).join(", ")}`);
+  if (typeof value !== "string" || !THINKING_LEVELS.has(value as ChildThinkingLevel))
+    throw new Error(`${name} must be one of ${Array.from(THINKING_LEVELS).join(", ")}`);
   return value as ChildThinkingLevel;
 }
 
@@ -167,7 +183,9 @@ function parseModel(value: string): ModelReference | undefined {
   if (slash < 1 || slash === value.length - 1) return undefined;
   const provider = value.slice(0, slash);
   const id = value.slice(slash + 1);
-  return nonWhitespace(provider) && nonWhitespace(id) && provider === provider.trim() && id === id.trim() ? { provider, id } : undefined;
+  return nonWhitespace(provider) && nonWhitespace(id) && provider === provider.trim() && id === id.trim()
+    ? { provider, id }
+    : undefined;
 }
 
 function selectAvailableModel(
@@ -177,12 +195,21 @@ function selectAvailableModel(
   if (choice.value === undefined) return undefined;
   const candidates = Array.isArray(choice.value) ? choice.value : [choice.value];
   if (choice.source === "parent") return parseModel(candidates[0]);
-  return candidates.map(parseModel).find((candidate): candidate is ModelReference =>
-    candidate !== undefined && availableModels.some((model) => model.provider === candidate.provider && model.id === candidate.id),
-  );
+  return candidates
+    .map(parseModel)
+    .find(
+      (candidate): candidate is ModelReference =>
+        candidate !== undefined &&
+        availableModels.some((model) => model.provider === candidate.provider && model.id === candidate.id),
+    );
 }
 
-function select<T>(explicit: T | undefined, role: T | undefined, defaults: T | undefined, parent: T | undefined): { value: T | undefined; source?: "explicit" | "role" | "default" | "parent" } {
+function select<T>(
+  explicit: T | undefined,
+  role: T | undefined,
+  defaults: T | undefined,
+  parent: T | undefined,
+): { value: T | undefined; source?: "explicit" | "role" | "default" | "parent" } {
   if (explicit !== undefined) return { value: explicit, source: "explicit" };
   if (role !== undefined) return { value: role, source: "role" };
   if (defaults !== undefined) return { value: defaults, source: "default" };
@@ -195,7 +222,8 @@ function withoutRolePrompt(selection: ChildRuntimeSelection): Omit<ChildRuntimeS
 }
 
 function rejectUnsupported(value: Record<string, unknown>, supported: string[], name: string): void {
-  for (const key of Object.keys(value)) if (!supported.includes(key)) throw new Error(`${name}.${key} is not supported`);
+  for (const key of Object.keys(value))
+    if (!supported.includes(key)) throw new Error(`${name}.${key} is not supported`);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

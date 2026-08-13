@@ -37,7 +37,10 @@ export interface ChildSettlement {
 
 /** A startup error may still identify a pane that the caller can inspect. */
 export class StartChildError extends Error {
-  constructor(message: string, readonly child?: HostedChild) {
+  constructor(
+    message: string,
+    readonly child?: HostedChild,
+  ) {
     super(message);
   }
 }
@@ -63,18 +66,29 @@ export class SessionChildRegistry {
   }
 
   async closeAll(host: ChildHost): Promise<void> {
-    await Promise.all(Array.from(this.children.values(), async (child) => {
-      try {
-        await host.close(child);
-      } catch {
-        // Ownership/occupant verification failed. Never close an uncertain pane.
-      }
-    }));
+    await Promise.all(
+      Array.from(this.children.values(), async (child) => {
+        try {
+          await host.close(child);
+        } catch {
+          // Ownership/occupant verification failed. Never close an uncertain pane.
+        }
+      }),
+    );
     this.children.clear();
   }
 }
 
-const REQUIRED_METHODS = ["tab.create", "tab.rename", "pane.split", "pane.rename", "agent.start", "agent.prompt", "agent.get", "pane.close"];
+const REQUIRED_METHODS = [
+  "tab.create",
+  "tab.rename",
+  "pane.split",
+  "pane.rename",
+  "agent.start",
+  "agent.prompt",
+  "agent.get",
+  "pane.close",
+];
 const SHELL_READY_RETRY_CODES = new Set(["agent_pane_not_found", "agent_pane_unavailable", "agent_pane_busy"]);
 const SHELL_READY_ATTEMPTS = 240;
 
@@ -93,7 +107,8 @@ export class HerdrChildHost implements ChildHost {
   constructor(private readonly registry?: SessionChildRegistry) {}
 
   async inspect(signal?: AbortSignal): Promise<HostInspection> {
-    if (process.env.HERDR_ENV !== "1") throw new HerdrProtocolError("unavailable", "spawn_pi requires a Herdr-managed Pi pane (HERDR_ENV=1)");
+    if (process.env.HERDR_ENV !== "1")
+      throw new HerdrProtocolError("unavailable", "spawn_pi requires a Herdr-managed Pi pane (HERDR_ENV=1)");
     const workspaceId = process.env.HERDR_WORKSPACE_ID;
     const tabId = process.env.HERDR_TAB_ID;
     const paneId = process.env.HERDR_PANE_ID;
@@ -105,7 +120,11 @@ export class HerdrChildHost implements ChildHost {
     const missing = REQUIRED_METHODS.filter((method) => !capabilities.methods.has(method));
     if (missing.length) throw new HerdrProtocolError("unsupported", `Herdr does not support: ${missing.join(", ")}`);
     await assertSocketReachable(socketPath, signal);
-    const parent = await new HerdrSocketClient(socketPath).call<AgentInfoResponse>("agent.get", { target: paneId }, signal);
+    const parent = await new HerdrSocketClient(socketPath).call<AgentInfoResponse>(
+      "agent.get",
+      { target: paneId },
+      signal,
+    );
     const agent = parent.agent;
     if (!agent || agent.workspace_id !== workspaceId || agent.tab_id !== tabId || agent.pane_id !== paneId) {
       throw new HerdrProtocolError("caller_identity_mismatch", "Herdr did not confirm the Parent pane identity");
@@ -127,13 +146,17 @@ export class HerdrChildHost implements ChildHost {
       location = await this.createLocation(client, request, signal);
       await client.call("pane.rename", { pane_id: location.paneId, label: childLabel(request) }, signal);
       rolePromptFile = request.rolePrompt ? await writeRolePrompt(request.rolePrompt) : undefined;
-      await this.startWhenShellAvailable(client, {
-        name: agentName,
-        kind: "pi",
-        pane_id: location.paneId,
-        args: piArgs(request, rolePromptFile?.path),
-        timeout_ms: 30_000,
-      }, signal);
+      await this.startWhenShellAvailable(
+        client,
+        {
+          name: agentName,
+          kind: "pi",
+          pane_id: location.paneId,
+          args: piArgs(request, rolePromptFile?.path),
+          timeout_ms: 30_000,
+        },
+        signal,
+      );
       const info = await this.waitForSession(client, location.paneId, signal);
       const child = await this.hostedChild(request, location, agentName, info);
       this.registry?.add(child);
@@ -150,7 +173,8 @@ export class HerdrChildHost implements ChildHost {
   async prompt(child: HostedChild, prompt: string, signal?: AbortSignal): Promise<ChildSettlement> {
     const client = new HerdrSocketClient(socketPath());
     const result = await this.promptWhenRecognized(client, child.location.paneId, prompt, signal);
-    const status = agentStatus(result) ?? (await this.getAgent(client, child.location.paneId, signal)).agent?.agent_status;
+    const status =
+      agentStatus(result) ?? (await this.getAgent(client, child.location.paneId, signal)).agent?.agent_status;
     return { status: status === "blocked" ? "blocked" : "settled" };
   }
 
@@ -165,32 +189,51 @@ export class HerdrChildHost implements ChildHost {
     this.registry?.remove(child);
   }
 
-  private async createLocation(client: HerdrSocketClient, request: StartChildRequest, signal?: AbortSignal): Promise<ChildLocation> {
+  private async createLocation(
+    client: HerdrSocketClient,
+    request: StartChildRequest,
+    signal?: AbortSignal,
+  ): Promise<ChildLocation> {
     if (request.placement === "tab") {
-      const result = await client.call<{ tab?: { tab_id?: string }; root_pane?: { pane_id?: string } }>("tab.create", {
-        workspace_id: request.parent.workspaceId,
-        cwd: request.context.cwd,
-        label: childLabel(request),
-        focus: false,
-      }, signal);
+      const result = await client.call<{ tab?: { tab_id?: string }; root_pane?: { pane_id?: string } }>(
+        "tab.create",
+        {
+          workspace_id: request.parent.workspaceId,
+          cwd: request.context.cwd,
+          label: childLabel(request),
+          focus: false,
+        },
+        signal,
+      );
       const tabId = result.tab?.tab_id;
       const paneId = result.root_pane?.pane_id;
-      if (!tabId || !paneId) throw new HerdrProtocolError("invalid_response", "Herdr did not return a child tab and pane");
+      if (!tabId || !paneId)
+        throw new HerdrProtocolError("invalid_response", "Herdr did not return a child tab and pane");
       return { workspaceId: request.parent.workspaceId, tabId, paneId };
     }
-    const result = await client.call<{ pane?: { workspace_id?: string; tab_id?: string; pane_id?: string } }>("pane.split", {
-      target_pane_id: request.parent.paneId,
-      workspace_id: request.parent.workspaceId,
-      cwd: request.context.cwd,
-      direction: "right",
-      focus: false,
-    }, signal);
+    const result = await client.call<{ pane?: { workspace_id?: string; tab_id?: string; pane_id?: string } }>(
+      "pane.split",
+      {
+        target_pane_id: request.parent.paneId,
+        workspace_id: request.parent.workspaceId,
+        cwd: request.context.cwd,
+        direction: "right",
+        focus: false,
+      },
+      signal,
+    );
     const pane = result.pane;
-    if (!pane?.workspace_id || !pane.tab_id || !pane.pane_id) throw new HerdrProtocolError("invalid_response", "Herdr did not return a child split");
+    if (!pane?.workspace_id || !pane.tab_id || !pane.pane_id)
+      throw new HerdrProtocolError("invalid_response", "Herdr did not return a child split");
     return { workspaceId: pane.workspace_id, tabId: pane.tab_id, paneId: pane.pane_id };
   }
 
-  private async hostedChild(request: StartChildRequest, location: ChildLocation, agentName: string, info: AgentInfoResponse): Promise<HostedChild> {
+  private async hostedChild(
+    request: StartChildRequest,
+    location: ChildLocation,
+    agentName: string,
+    info: AgentInfoResponse,
+  ): Promise<HostedChild> {
     const sessionPath = info.agent?.agent_session?.value;
     return {
       taskId: request.taskId,
@@ -203,9 +246,18 @@ export class HerdrChildHost implements ChildHost {
     };
   }
 
-  private async partialChild(request: StartChildRequest, location: ChildLocation, agentName: string): Promise<HostedChild> {
+  private async partialChild(
+    request: StartChildRequest,
+    location: ChildLocation,
+    agentName: string,
+  ): Promise<HostedChild> {
     try {
-      return await this.hostedChild(request, location, agentName, await this.getAgent(new HerdrSocketClient(request.parent.socketPath), location.paneId));
+      return await this.hostedChild(
+        request,
+        location,
+        agentName,
+        await this.getAgent(new HerdrSocketClient(request.parent.socketPath), location.paneId),
+      );
     } catch {
       return { taskId: request.taskId, sessionId: request.sessionId, location, agentName };
     }
@@ -215,19 +267,32 @@ export class HerdrChildHost implements ChildHost {
     return client.call<AgentInfoResponse>("agent.get", { target }, signal);
   }
 
-  private async startWhenShellAvailable(client: HerdrSocketClient, params: Record<string, unknown>, signal?: AbortSignal): Promise<void> {
+  private async startWhenShellAvailable(
+    client: HerdrSocketClient,
+    params: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<void> {
     for (let attempt = 0; attempt < SHELL_READY_ATTEMPTS; attempt += 1) {
       try {
         await client.call("agent.start", params, signal);
         return;
       } catch (error) {
-        if (!(error instanceof HerdrProtocolError) || !SHELL_READY_RETRY_CODES.has(error.code) || attempt === SHELL_READY_ATTEMPTS - 1) throw error;
+        if (
+          !(error instanceof HerdrProtocolError) ||
+          !SHELL_READY_RETRY_CODES.has(error.code) ||
+          attempt === SHELL_READY_ATTEMPTS - 1
+        )
+          throw error;
         await delay(250, signal);
       }
     }
   }
 
-  private async waitForSession(client: HerdrSocketClient, paneId: string, signal?: AbortSignal): Promise<AgentInfoResponse> {
+  private async waitForSession(
+    client: HerdrSocketClient,
+    paneId: string,
+    signal?: AbortSignal,
+  ): Promise<AgentInfoResponse> {
     for (let attempt = 0; attempt < 120; attempt += 1) {
       const info = await this.getAgent(client, paneId, signal);
       if (info.agent?.agent_session?.kind === "path" && info.agent.agent_session.value) return info;
@@ -236,12 +301,22 @@ export class HerdrChildHost implements ChildHost {
     throw new HerdrProtocolError("start_timeout", "Herdr did not report the child Pi session path");
   }
 
-  private async promptWhenRecognized(client: HerdrSocketClient, paneId: string, prompt: string, signal?: AbortSignal): Promise<unknown> {
+  private async promptWhenRecognized(
+    client: HerdrSocketClient,
+    paneId: string,
+    prompt: string,
+    signal?: AbortSignal,
+  ): Promise<unknown> {
     for (let attempt = 0; attempt < 60; attempt += 1) {
       try {
         return await client.call("agent.prompt", { target: paneId, text: prompt, wait: {} }, signal);
       } catch (error) {
-        if (!(error instanceof HerdrProtocolError) || !error.message.includes("not an active named agent") || attempt === 59) throw error;
+        if (
+          !(error instanceof HerdrProtocolError) ||
+          !error.message.includes("not an active named agent") ||
+          attempt === 59
+        )
+          throw error;
         await delay(500, signal);
       }
     }
@@ -270,11 +345,13 @@ function childLabel(request: StartChildRequest): string {
 }
 
 function labelSegment(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, "-")
-    .replace(/^-+|-+$/g, "") || "parent";
+  return (
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, "-")
+      .replace(/^-+|-+$/g, "") || "parent"
+  );
 }
 
 function childName(taskId: TaskId): string {
