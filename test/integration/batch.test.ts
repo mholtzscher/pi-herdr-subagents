@@ -4,6 +4,7 @@ import { readFileSync, statSync } from "node:fs";
 import { access } from "node:fs/promises";
 import test from "node:test";
 import { ConcurrentBatchRunner } from "../../src/batch.js";
+import type { BatchProgress } from "../../src/domain.js";
 import { HerdrChildHost, SessionChildRegistry, StartChildError } from "../../src/herdr/host.js";
 import type { ChildResultReader } from "../../src/results.js";
 import { FakeChildHost, parentContext } from "../support/fake-child-host.js";
@@ -172,15 +173,22 @@ test("removes the temporary role prompt when child startup fails", async () => {
 test("does not start children when the Parent tab cannot be renamed", async () => {
   const host = new FakeChildHost();
   host.renameError = new Error("tab rename rejected");
+  const snapshots: BatchProgress[] = [];
 
   const result = await new ConcurrentBatchRunner(host, new Reader()).run(
     { tasks: [{ prompt: "one" }, { prompt: "two" }] },
     parentContext,
+    undefined,
+    { onProgress: (snapshot) => snapshots.push(snapshot) },
   );
 
   assert.deepEqual(
     result.results.map((child) => child.status),
     ["failed", "failed"],
+  );
+  assert.deepEqual(
+    snapshots.map((snapshot) => snapshot.results.length),
+    [0, 2],
   );
   assert.equal(host.started.length, 0);
   assert.deepEqual(host.parentLabels, []);
@@ -263,6 +271,51 @@ test("runs four children concurrently, preserves request order, and closes succe
   );
   assert.equal(host.closed.length, 4);
   assert.deepEqual(host.parentLabels, ["Pi [w1-p1]"]);
+});
+
+test("emits immutable request-ordered progress snapshots from initial through final settlement", async () => {
+  const host = new FakeChildHost();
+  host.sessionPaths.set("task-1" as never, "/tmp/one.jsonl");
+  host.sessionPaths.set("task-2" as never, "/tmp/two.jsonl");
+  const prompt = host.prompt.bind(host);
+  let releaseFirst!: () => void;
+  let secondSettled!: () => void;
+  const firstPending = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  const secondComplete = new Promise<void>((resolve) => {
+    secondSettled = resolve;
+  });
+  host.prompt = async (child, taskPrompt) => {
+    if (child.taskId === "task-1") await firstPending;
+    else secondSettled();
+    return prompt(child, taskPrompt);
+  };
+  const snapshots: BatchProgress[] = [];
+  const pending = new ConcurrentBatchRunner(host, new Reader()).run(
+    { tasks: [{ prompt: "one" }, { prompt: "two" }] },
+    parentContext,
+    undefined,
+    { onProgress: (snapshot) => snapshots.push(snapshot) },
+  );
+
+  await secondComplete;
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  releaseFirst();
+  const result = await pending;
+
+  assert.deepEqual(
+    snapshots.map((snapshot) => snapshot.results.map((child) => child.taskId)),
+    [[], ["task-2"], ["task-1", "task-2"]],
+  );
+  assert.deepEqual(
+    snapshots.map((snapshot) => snapshot.completed),
+    [0, 1, 2],
+  );
+  assert.notStrictEqual(snapshots[0].results, snapshots[1].results);
+  assert.notStrictEqual(snapshots[1].results, snapshots[2].results);
+  assert.strictEqual(snapshots[2].results[0], result.results[0]);
+  assert.strictEqual(snapshots[2].results[1], result.results[1]);
 });
 
 test("preserves partial failures and blocked children without closing them", async () => {

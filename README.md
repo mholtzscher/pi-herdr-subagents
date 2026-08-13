@@ -12,7 +12,7 @@ The package loads safely outside Herdr. Calling `spawn_pi` there returns an acti
 
 ## Use
 
-Ask Parent Pi to call `spawn_pi` with independent tasks. Each task defaults to its own no-focus tab; use `placement: "split"` for a sibling split.
+Ask Parent Pi to call `spawn_pi` with independent tasks. Each task defaults to its own no-focus tab; use `placement: "split"` for a sibling split. The live result card shows every task in request order as `working`, `complete`, `needs input`, or `incomplete`; requested roles appear as visible row badges, while runtime details appear only when expanded.
 
 ### Orchestrator mode
 
