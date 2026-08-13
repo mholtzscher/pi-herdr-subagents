@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.0](https://github.com/mholtzscher/pi-herdr-subagents/compare/v1.0.0...v1.1.0) (2026-08-13)
+
+
+### Features
+
+* **child-roles:** add child runtime roles ([ab63f98](https://github.com/mholtzscher/pi-herdr-subagents/commit/ab63f980b1eeca660ed17ce493fff813c33506e6))
+* **child-roles:** add child runtime roles ([9635958](https://github.com/mholtzscher/pi-herdr-subagents/commit/96359584e7549ea9dd2d46ce59356682e18daaa1))
+
+
+### Bug Fixes
+
+* **child-roles:** address routing review feedback ([c4dc2fc](https://github.com/mholtzscher/pi-herdr-subagents/commit/c4dc2fcf7ddfd40f1af335748d12d433ff9920e0))
+
 ## 1.0.0 (2026-08-12)
 
 
