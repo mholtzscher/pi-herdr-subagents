@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { getEventListeners } from "node:events";
 import { readFileSync, statSync } from "node:fs";
 import { access } from "node:fs/promises";
 import test from "node:test";
@@ -59,6 +60,7 @@ test("retries child startup until the pane and its shell are ready", async () =>
     Object.assign(new Error("agent target pane w21:p9 is not an available shell"), { code: "agent_pane_busy" }),
   ];
   let startAttempts = 0;
+  const controller = new AbortController();
   const server = await createFakeHerdrServer((request) => {
     if (request.method === "tab.create") return { tab: { tab_id: "w21:t2" }, root_pane: { pane_id: "w21:p9" } };
     if (request.method === "agent.start") {
@@ -76,8 +78,9 @@ test("retries child startup until the pane and its shell are ready", async () =>
       sessionId: "child",
       context: parentContext,
       parent: { workspaceId: "w21", tabId: "w21:t1", paneId: "w21:p1", socketPath: server.path },
-    });
+    }, controller.signal);
     assert.equal(startAttempts, 4);
+    assert.equal(getEventListeners(controller.signal, "abort").length, 0);
   } finally {
     await server.close();
   }

@@ -282,12 +282,17 @@ function childName(taskId: TaskId): string {
 }
 
 function delay(milliseconds: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.reject(new HerdrProtocolError("aborted", "Herdr startup wait aborted"));
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(resolve, milliseconds);
-    signal?.addEventListener("abort", () => {
+    const abort = () => {
       clearTimeout(timer);
       reject(new HerdrProtocolError("aborted", "Herdr startup wait aborted"));
-    }, { once: true });
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", abort);
+      resolve();
+    }, milliseconds);
+    signal?.addEventListener("abort", abort, { once: true });
   });
 }
 
