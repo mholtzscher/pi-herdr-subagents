@@ -1,9 +1,19 @@
 export type TaskId = string & { readonly __brand: "TaskId" };
 export type ChildPlacement = "tab" | "split";
+export type ChildThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+export type SelectionSource = "explicit" | "role" | "default" | "parent";
+
+export interface ModelReference {
+  provider: string;
+  id: string;
+}
 
 export interface SpawnTask {
   prompt: string;
   placement?: ChildPlacement;
+  role?: string;
+  model?: string;
+  thinking?: ChildThinkingLevel;
 }
 
 export interface SpawnBatchRequest {
@@ -18,6 +28,14 @@ export interface ChildLocation {
   paneId: string;
 }
 
+export interface ChildRuntimeSelection {
+  model?: ModelReference;
+  modelSource?: SelectionSource;
+  thinkingLevel?: ChildThinkingLevel;
+  thinkingSource?: SelectionSource;
+  rolePrompt?: string;
+}
+
 export interface ChildResult {
   taskId: TaskId;
   requestIndex: number;
@@ -28,8 +46,10 @@ export interface ChildResult {
   sessionPath?: string;
   location?: ChildLocation;
   paneClosed: boolean;
+  role?: string;
+  selection?: Omit<ChildRuntimeSelection, "rolePrompt">;
   error?: {
-    code: "start_failed" | "prompt_failed" | "result_unreadable" | "blocked" | "parent_aborted";
+    code: "role_not_found" | "model_routing_failed" | "start_failed" | "prompt_failed" | "result_unreadable" | "blocked" | "parent_aborted";
     message: string;
   };
 }
@@ -42,8 +62,8 @@ export interface SpawnBatchResult {
 export interface ParentContext {
   cwd: string;
   parentLabel?: string;
-  model?: { provider: string; id: string };
-  thinkingLevel?: string;
+  model?: ModelReference;
+  thinkingLevel?: ChildThinkingLevel;
 }
 
 export interface BatchProgress {
@@ -53,6 +73,8 @@ export interface BatchProgress {
 }
 
 export class RequestValidationError extends Error {}
+
+const THINKING_LEVELS = new Set<ChildThinkingLevel>(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 
 export function validateSpawnBatchRequest(request: SpawnBatchRequest): void {
   if (!Array.isArray(request.tasks) || request.tasks.length < 1 || request.tasks.length > 8) {
@@ -65,7 +87,25 @@ export function validateSpawnBatchRequest(request: SpawnBatchRequest): void {
     if (task.placement !== undefined && task.placement !== "tab" && task.placement !== "split") {
       throw new RequestValidationError(`tasks[${index}].placement must be tab or split`);
     }
+    if (task.role !== undefined && (typeof task.role !== "string" || task.role.trim().length === 0)) {
+      throw new RequestValidationError(`tasks[${index}].role must be non-empty`);
+    }
+    if (task.model !== undefined && !isCanonicalModel(task.model)) {
+      throw new RequestValidationError(`tasks[${index}].model must be an exact provider/model-id`);
+    }
+    if (task.thinking !== undefined && !THINKING_LEVELS.has(task.thinking)) {
+      throw new RequestValidationError(`tasks[${index}].thinking must be a supported thinking level`);
+    }
   });
+}
+
+function isCanonicalModel(value: unknown): value is string {
+  if (typeof value !== "string" || value !== value.trim()) return false;
+  const slash = value.indexOf("/");
+  if (slash <= 0 || slash === value.length - 1) return false;
+  const provider = value.slice(0, slash);
+  const id = value.slice(slash + 1);
+  return provider === provider.trim() && id === id.trim() && provider.length > 0 && id.length > 0;
 }
 
 export function taskIdFor(index: number): TaskId {

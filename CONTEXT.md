@@ -20,7 +20,7 @@ A fresh Pi session started in a plugin-created Herdr tab or split for exactly on
 One tool invocation containing one or more independent child tasks.
 
 **Child Task**  
-One bounded prompt assigned to one fresh Child Pi.
+One bounded prompt assigned to one fresh Child Pi. It may request a configured Child Role plus model and thinking overrides.
 
 **Child Result**  
 The concise final answer attributed to a Child Task, with status and resumable Pi session identity.
@@ -39,7 +39,7 @@ A failed, blocked, interrupted, or unattributable Child Pi left visible for huma
 - Every Child Task gets a fresh Pi session and fresh context window.
 - A Child Pi receives exactly one orchestrated task.
 - Tasks in a Batch are independent and run concurrently.
-- Children use the Parent Pi's current checkout and normal Pi coding tools.
+- Children use the Parent Pi's current checkout and normal Pi coding tools. A configured role appends identity guidance without replacing Pi's normal system or project context.
 - Concurrent children may edit the same checkout; the extension does not prevent or reconcile conflicts.
 - A successful result comes from the marked child Pi session, not terminal scraping.
 - A Collected Child is closed only after its result and session ID are safely read.

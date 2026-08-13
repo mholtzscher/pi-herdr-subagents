@@ -50,6 +50,30 @@ test("labels the Parent tab and every visible child surface with its readable Pa
   }
 });
 
+test("passes selected role identity as one non-shell Pi argument", async () => {
+  const calls: Array<{ method: string; params: Record<string, unknown> }> = [];
+  const server = await createFakeHerdrServer((request) => {
+    calls.push(request as { method: string; params: Record<string, unknown> });
+    if (request.method === "tab.create") return { tab: { tab_id: "w21:t2" }, root_pane: { pane_id: "w21:p9" } };
+    if (request.method === "agent.start") return {};
+    return { agent: { terminal_id: "term-1", agent_session: { kind: "path", value: "/missing.jsonl" } } };
+  });
+  try {
+    await new HerdrChildHost().start({
+      taskId: "task-1" as never,
+      placement: "tab",
+      sessionId: "child",
+      context: parentContext,
+      rolePrompt: "README.md",
+      parent: { workspaceId: "w21", tabId: "w21:t1", paneId: "w21:p1", socketPath: server.path },
+    });
+    const args = calls.find((call) => call.method === "agent.start")?.params.args as string[];
+    assert.deepEqual(args.slice(-2), ["--append-system-prompt", "Child role instructions:\nREADME.md"]);
+  } finally {
+    await server.close();
+  }
+});
+
 test("does not start children when the Parent tab cannot be renamed", async () => {
   const host = new FakeChildHost();
   host.renameError = new Error("tab rename rejected");
@@ -139,6 +163,48 @@ test("preserves partial failures and blocked children without closing them", asy
   assert.equal(result.results[2].error?.code, "blocked");
 });
 
+test("routes independent tasks while leaving route failures pane-free", async () => {
+  const host = new FakeChildHost();
+  host.sessionPaths.set("task-1" as never, "/tmp/one.jsonl");
+  host.sessionPaths.set("task-4" as never, "/tmp/four.jsonl");
+  const result = await new ConcurrentBatchRunner(host, new Reader()).run(
+    {
+      tasks: [
+        { prompt: "one", role: "explore" },
+        { prompt: "two", role: "missing" },
+        { prompt: "three", model: "missing/model" },
+        { prompt: "four", model: "routed/model", thinking: "off" },
+        { prompt: "five", role: "unavailable" },
+      ],
+    },
+    parentContext,
+    {
+      config: {
+        defaults: { thinking: "medium" },
+        roles: {
+          explore: { prompt: "Read only.", model: "routed/model", thinking: "low" },
+          unavailable: { prompt: "Private role.", model: "private/model" },
+        },
+      },
+      availableModels: [{ provider: "routed", id: "model" }],
+    },
+  );
+
+  assert.deepEqual(result.results.map((child) => child.status), ["succeeded", "failed", "failed", "succeeded", "failed"]);
+  assert.deepEqual(result.results.map((child) => child.error?.code), [undefined, "role_not_found", "model_routing_failed", undefined, "model_routing_failed"]);
+  assert.deepEqual(host.started.map((child) => child.taskId), ["task-1", "task-4"]);
+  assert.deepEqual(host.startRequests[0].context.model, { provider: "routed", id: "model" });
+  assert.equal(host.startRequests[0].context.thinkingLevel, "low");
+  assert.equal(host.startRequests[0].rolePrompt, "Read only.");
+  assert.equal(host.startRequests[1].context.thinkingLevel, "off");
+  assert.equal(result.results[0].selection?.modelSource, "role");
+  assert.equal(result.results[0].selection?.thinkingSource, "role");
+  assert.equal(result.results[3].selection?.modelSource, "explicit");
+  assert.equal(result.results[3].selection?.thinkingSource, "explicit");
+  assert.deepEqual(result.results[4].selection, { thinkingLevel: "medium", thinkingSource: "default" });
+  assert.doesNotMatch(JSON.stringify(result.results[4]), /private\/model|Private role/);
+});
+
 test("session cleanup closes tracked children but leaves uncertain occupants alone", async () => {
   const host = new FakeChildHost();
   const registry = new SessionChildRegistry();
@@ -159,7 +225,12 @@ test("parent abort leaves a started child open", async () => {
   let resolvePrompt!: () => void;
   host.prompt = async () => new Promise((resolve) => { resolvePrompt = () => resolve({ status: "settled" }); });
   const controller = new AbortController();
-  const pending = new ConcurrentBatchRunner(host, new Reader()).run({ tasks: [{ prompt: "one" }] }, parentContext, { signal: controller.signal });
+  const pending = new ConcurrentBatchRunner(host, new Reader()).run(
+    { tasks: [{ prompt: "one" }] },
+    parentContext,
+    { config: { defaults: {}, roles: {} }, availableModels: [] },
+    { signal: controller.signal },
+  );
   await new Promise((resolve) => setTimeout(resolve, 0));
   controller.abort();
   const result = await pending;

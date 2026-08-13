@@ -4,6 +4,7 @@ import type { ChildHost, ChildSettlement, HostedChild, HostInspection, StartChil
 export class FakeChildHost implements ChildHost {
   readonly inspection: HostInspection = { workspaceId: "w1", tabId: "w1:t1", paneId: "w1:p1", socketPath: "/tmp/herdr.sock" };
   readonly started: HostedChild[] = [];
+  readonly startRequests: StartChildRequest[] = [];
   readonly closed: HostedChild[] = [];
   readonly parentLabels: string[] = [];
   renameError?: Error;
@@ -23,6 +24,7 @@ export class FakeChildHost implements ChildHost {
   }
 
   async start(request: StartChildRequest): Promise<HostedChild> {
+    this.startRequests.push(request);
     const error = this.startErrors.get(request.taskId);
     if (error) throw error;
     const child: HostedChild = {
