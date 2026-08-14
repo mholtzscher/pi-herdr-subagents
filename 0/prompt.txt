@@ -1,0 +1,5 @@
+i want to create a role that is a general worker so that the orchestrator doesn't try to do all the changes it self since it is usually a more expensive model
+
+---
+
+use max variant of luna
