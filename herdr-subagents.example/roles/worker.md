@@ -1,6 +1,8 @@
 ---
 description: "Use for general implementation work: inspect the relevant code, make focused changes, run verification, and report results. Suitable for most bounded coding tasks that do not require a specialist role."
-model: openai-codex/gpt-5.6-luna
+model:
+  - openai-codex/gpt-5.6-luna
+  - opencode-go/deepseek-v4-pro
 thinking: max
 ---
 
