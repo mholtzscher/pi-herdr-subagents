@@ -1,0 +1,38 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "01M00S5QCCPXTTQ13MH9TYK0D1",
+  "session_id": "01a0017d-369a-7759-8d5f-62557d3b716b",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-14T18:39:58.198279987Z",
+  "branch": "tabs-vs-panes",
+  "checkpoints_count": 2,
+  "files_touched": [],
+  "agent": "Pi",
+  "model": "gpt-5.6-sol",
+  "turn_id": "fb6709669287",
+  "checkpoint_transcript_start": 79,
+  "transcript_lines_at_start": 79,
+  "compact_transcript_start": 27,
+  "token_usage": {
+    "input_tokens": 78098,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 718336,
+    "output_tokens": 1735,
+    "api_call_count": 12
+  },
+  "session_metrics": {
+    "turn_count": 3
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 173,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "specs/config-owned-child-placement.md": 173
+      }
+    }
+  ]
+}
