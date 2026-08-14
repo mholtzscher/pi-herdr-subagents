@@ -76,7 +76,7 @@ export function registerOrchestrator(pi: ExtensionAPI, configResult: ChildRolesC
     enabled = next;
     persist();
     updateStatus(ctx);
-    ctx.ui.notify(`Orchestrator mode ${enabled ? "enabled" : "disabled"}.`, "info");
+    ctx.ui.notify(enabled ? "✓ Orchestrator enabled" : "○ Orchestrator disabled", "info");
   }
 
   pi.registerCommand("orchestrator", {
@@ -89,13 +89,16 @@ export function registerOrchestrator(pi: ExtensionAPI, configResult: ChildRolesC
     handler: async (args, ctx) => {
       const action = args.trim().toLowerCase() || "toggle";
       if (action === "status") {
-        const message = available()
-          ? `Orchestrator mode is ${enabled ? "enabled" : "disabled"}.`
+        const isAvailable = available();
+        const message = isAvailable
+          ? `${enabled ? "●" : "○"} Orchestrator ${enabled ? "enabled" : "disabled"}`
           : unavailableMessage(configResult);
-        const roles = configResult.ok
-          ? (roleGuidance(configResult.config) ?? "Configured Child Roles: none")
-          : undefined;
-        ctx.ui.notify(roles ? `${message}\n${roles}` : message, available() ? "info" : "warning");
+        const roles =
+          isAvailable && configResult.ok
+            ? (roleGuidance(configResult.config)?.replace("Configured Child Roles: ", "").replaceAll("; ", " · ") ??
+              "none")
+            : undefined;
+        ctx.ui.notify(roles ? `${message}\n  Roles  ${roles}` : message, isAvailable ? "info" : "warning");
         return;
       }
       if (action === "off") return setEnabled(false, ctx);
@@ -105,7 +108,7 @@ export function registerOrchestrator(pi: ExtensionAPI, configResult: ChildRolesC
       }
       if (action === "on") return setEnabled(true, ctx);
       if (action === "toggle") return setEnabled(!enabled, ctx);
-      ctx.ui.notify("Usage: /orchestrator [on|off|status|toggle]", "error");
+      ctx.ui.notify("! Usage: /orchestrator [on|off|status|toggle]", "error");
     },
   });
 
@@ -156,6 +159,6 @@ function hasHerdrParentEnvironment(): boolean {
 
 function unavailableMessage(configResult: ChildRolesConfigLoadResult): string {
   return configResult.ok
-    ? "Orchestrator mode requires a Herdr Parent with spawn_pi active."
-    : `Invalid config at ${configResult.path}: ${configResult.error}. Orchestrator mode is disabled and spawn_pi is blocked.`;
+    ? "△ Orchestrator unavailable\n  Requires a Herdr Parent with spawn_pi active."
+    : `! Orchestrator disabled — invalid config\n  ${configResult.path}\n  ${configResult.error}\n  spawn_pi blocked`;
 }

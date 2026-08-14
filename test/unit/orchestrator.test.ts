@@ -138,10 +138,11 @@ test("uses the configured default, persists it, injects instructions, and toggle
     await h.command.handler("off", h.ctx);
     assert.deepEqual(h.appended.at(-1), { customType: ORCHESTRATOR_STATE_ENTRY, data: { enabled: false } });
     assert.equal(h.emit("before_agent_start", { systemPrompt: "base" }), undefined);
-    assert.match(h.notifications.at(-1)?.message ?? "", /disabled/);
+    assert.deepEqual(h.notifications.at(-1), { message: "○ Orchestrator disabled", level: "info" });
 
     await h.command.handler("", h.ctx);
     assert.deepEqual(h.appended.at(-1), { customType: ORCHESTRATOR_STATE_ENTRY, data: { enabled: true } });
+    assert.deepEqual(h.notifications.at(-1), { message: "✓ Orchestrator enabled", level: "info" });
   });
 });
 
@@ -162,7 +163,7 @@ test("status reports configured Child Roles and descriptions", async () => {
     await h.command.handler("status", h.ctx);
 
     assert.deepEqual(h.notifications.at(-1), {
-      message: "Orchestrator mode is enabled.\nConfigured Child Roles: explore (Read-only reconnaissance.); reviewer",
+      message: "● Orchestrator enabled\n  Roles  explore (Read-only reconnaissance.) · reviewer",
       level: "info",
     });
   });
@@ -172,11 +173,12 @@ test("status reports when no Child Roles are configured", async () => {
   await withParentEnvironment(async () => {
     const h = harness(enabledConfig);
     h.emit("session_start", { reason: "new" });
+    await h.command.handler("off", h.ctx);
 
     await h.command.handler("status", h.ctx);
 
     assert.deepEqual(h.notifications.at(-1), {
-      message: "Orchestrator mode is enabled.\nConfigured Child Roles: none",
+      message: "○ Orchestrator disabled\n  Roles  none",
       level: "info",
     });
   });
@@ -250,23 +252,47 @@ test("disables and persists while spawn_pi is inactive", async () => {
   });
 });
 
+test("reports invalid command usage", async () => {
+  await withParentEnvironment(async () => {
+    const h = harness(enabledConfig);
+    h.emit("session_start", { reason: "new" });
+
+    await h.command.handler("invalid", h.ctx);
+
+    assert.deepEqual(h.notifications.at(-1), {
+      message: "! Usage: /orchestrator [on|off|status|toggle]",
+      level: "error",
+    });
+  });
+});
+
 test("keeps the mode unavailable in children, outside Herdr, and with invalid config", async () => {
   await withParentEnvironment(async () => {
     const child = harness(enabledConfig, []);
     child.emit("session_start", { reason: "new" });
     assert.equal(child.emit("before_agent_start", { systemPrompt: "base" }), undefined);
-    await child.command.handler("on", child.ctx);
-    assert.match(child.notifications.at(-1)?.message ?? "", /Herdr Parent/);
+    await child.command.handler("status", child.ctx);
+    assert.deepEqual(child.notifications.at(-1), {
+      message: "△ Orchestrator unavailable\n  Requires a Herdr Parent with spawn_pi active.",
+      level: "warning",
+    });
 
     for (const key of HERDR_KEYS) delete process.env[key];
     const outside = harness(enabledConfig);
     outside.emit("session_start", { reason: "new" });
     await outside.command.handler("on", outside.ctx);
-    assert.match(outside.notifications.at(-1)?.message ?? "", /Herdr Parent/);
+    assert.deepEqual(outside.notifications.at(-1), {
+      message: "△ Orchestrator unavailable\n  Requires a Herdr Parent with spawn_pi active.",
+      level: "warning",
+    });
 
     const invalid = harness({ ok: false, path: "/bad.json", error: "orchestrator.enabled must be a boolean" });
     invalid.emit("session_start", { reason: "new" });
-    assert.match(invalid.notifications.at(-1)?.message ?? "", /Invalid config at \/bad.json/);
+    assert.deepEqual(invalid.notifications.at(-1), {
+      message:
+        "! Orchestrator disabled — invalid config\n  /bad.json\n  orchestrator.enabled must be a boolean\n  spawn_pi blocked",
+      level: "warning",
+    });
     assert.equal(invalid.emit("before_agent_start", { systemPrompt: "base" }), undefined);
   });
 });
