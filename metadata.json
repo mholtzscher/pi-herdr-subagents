@@ -1,0 +1,26 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "01M00JPBYG6BZEMX07Y301Y692",
+  "strategy": "manual-commit",
+  "branch": "add-general-worker-role",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "herdr-subagents.example/roles/worker.md"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0/metadata.json",
+      "transcript": "/0/full.jsonl",
+      "compact_transcript": "/0/transcript.jsonl",
+      "content_hash": "/0/content_hash.txt",
+      "prompt": "/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 20640,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 260096,
+    "output_tokens": 1019,
+    "api_call_count": 6
+  }
+}
