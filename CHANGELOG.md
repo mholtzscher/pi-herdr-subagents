@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.3.0](https://github.com/mholtzscher/pi-herdr-subagents/compare/v1.2.1...v1.3.0) (2026-08-14)
+
+
+### Features
+
+* add deepseek fallback to worker role ([8381a14](https://github.com/mholtzscher/pi-herdr-subagents/commit/8381a14323483fdd80457afd594d91b1470c0e21))
+* add general worker child role ([aa614ee](https://github.com/mholtzscher/pi-herdr-subagents/commit/aa614eeaae059926f0ede3809d908a7974649a77))
+* add general worker child role ([b252412](https://github.com/mholtzscher/pi-herdr-subagents/commit/b252412e04af87149f11e5e2452ab23254aa762b))
+* **entire:** enable entire checkpointing for pi agent sessions ([d37f8ec](https://github.com/mholtzscher/pi-herdr-subagents/commit/d37f8ecfbdb051b0cfc95384037ec5c67bf96bf2))
+* **entire:** enable entire checkpointing for pi agent sessions ([19e6c5b](https://github.com/mholtzscher/pi-herdr-subagents/commit/19e6c5b6cfbfff9720a2be8d6f280a6f01c66bfc))
+* load child roles from markdown catalogue ([afd43d8](https://github.com/mholtzscher/pi-herdr-subagents/commit/afd43d8f3e85c46fb849370a6e2ae771d5d86740))
+* load child roles from markdown catalogue ([3d69533](https://github.com/mholtzscher/pi-herdr-subagents/commit/3d6953319a5a299f853c332ad4ed204b585e5b15))
+* make child placement config-owned ([89447d8](https://github.com/mholtzscher/pi-herdr-subagents/commit/89447d83788ee194102dab36b6b4561171c55a0e))
+* make child placement config-owned ([1009ebb](https://github.com/mholtzscher/pi-herdr-subagents/commit/1009ebb1b2430285b78efe32631b5a5ba511c73f))
+* **orchestrator:** show roles in status ([10d33ff](https://github.com/mholtzscher/pi-herdr-subagents/commit/10d33ff6e41db5208374071bb0a7a4b4e8cf8eb0))
+* **roles:** improve role discovery and visibility ([15443f1](https://github.com/mholtzscher/pi-herdr-subagents/commit/15443f17e68165391705b38e540894abdf4d8078))
+* **roles:** support symlinks and clarify selection ([1056a9a](https://github.com/mholtzscher/pi-herdr-subagents/commit/1056a9a3cbae67fb9e679a1b2f3d9f228a6f4373))
+
+
+### Bug Fixes
+
+* **entire:** preserve parent tracking across subagents ([1fc83bd](https://github.com/mholtzscher/pi-herdr-subagents/commit/1fc83bde78cf98f75b187faf666a7d92ee319541))
+* **orchestrator:** preserve role description punctuation ([2f9ab6d](https://github.com/mholtzscher/pi-herdr-subagents/commit/2f9ab6d9500e8f4619282c1bfcb01f4273e7aa9a))
+
 ## [1.2.1](https://github.com/mholtzscher/pi-herdr-subagents/compare/v1.2.0...v1.2.1) (2026-08-14)
 
 
