@@ -1,0 +1,13 @@
+the orchestrator command output is kind of ugly. give me some nicer options for each possible output from that command. show them to me in sideshow
+
+---
+
+implement option A
+
+---
+
+rebase with main
+
+---
+
+what is uncommitted?
