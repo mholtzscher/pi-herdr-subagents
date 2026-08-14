@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { BatchRunner } from "../../src/batch.js";
-import type { ChildResult } from "../../src/domain.js";
+import type { BatchProgress, ChildResult, SpawnBatchResult, SpawnTask } from "../../src/domain.js";
+import { taskIdFor } from "../../src/domain.js";
 import { registerSpawnPiTool } from "../../src/tools.js";
 
 const theme = {
@@ -10,11 +11,20 @@ const theme = {
   bold: (text: string) => text,
 };
 
-function registeredTool(runner: BatchRunner = {} as BatchRunner): any {
+type RegisteredTool = Parameters<ExtensionAPI["registerTool"]>[0];
+
+const unusedRunner: BatchRunner = {
+  async run() {
+    throw new Error("The renderer tests do not run the batch runner");
+  },
+};
+
+function registeredTool(runner: BatchRunner = unusedRunner): any {
   let tool: any;
   registerSpawnPiTool(
+    // SAFETY: This test double is used only to capture the tool definition, the sole ExtensionAPI member registerSpawnPiTool accesses.
     {
-      registerTool(definition: unknown) {
+      registerTool(definition: RegisteredTool) {
         tool = definition;
       },
     } as ExtensionAPI,
@@ -27,7 +37,7 @@ function registeredTool(runner: BatchRunner = {} as BatchRunner): any {
 
 function child(overrides: Partial<ChildResult> = {}): ChildResult {
   return {
-    taskId: "task-1" as never,
+    taskId: taskIdFor(0),
     requestIndex: 0,
     status: "succeeded",
     truncated: false,
@@ -36,7 +46,19 @@ function child(overrides: Partial<ChildResult> = {}): ChildResult {
   };
 }
 
-function render(tool: any, details: unknown, args: unknown, expanded = false, isPartial = false): string {
+type RenderDetails =
+  | { phase: "working"; progress: BatchProgress }
+  | { phase: "finished"; result: SpawnBatchResult }
+  | SpawnBatchResult
+  | undefined;
+
+function render(
+  tool: any,
+  details: RenderDetails,
+  args: { tasks: SpawnTask[] },
+  expanded = false,
+  isPartial = false,
+): string {
   return tool
     .renderResult({ details, content: [{ type: "text", text: "raw text" }] }, { expanded, isPartial }, theme, { args })
     .render(500)
@@ -57,7 +79,7 @@ test("renders a stable partial card with every requested task in request order",
         results: [
           child({
             requestIndex: 1,
-            taskId: "task-2" as never,
+            taskId: taskIdFor(1),
             status: "blocked",
             paneClosed: false,
             location: { workspaceId: "w", tabId: "tab-5", paneId: "pane-2" },
@@ -95,7 +117,7 @@ test("renders collapsed and expanded final rows with the approved visibility pol
         },
       }),
       child({
-        taskId: "task-2" as never,
+        taskId: taskIdFor(1),
         requestIndex: 1,
         status: "blocked",
         paneClosed: false,
@@ -103,7 +125,7 @@ test("renders collapsed and expanded final rows with the approved visibility pol
         error: { code: "blocked", message: "Please choose" },
       }),
       child({
-        taskId: "task-3" as never,
+        taskId: taskIdFor(2),
         requestIndex: 2,
         status: "failed",
         error: { code: "model_routing_failed", message: "No configured model is available" },
@@ -132,7 +154,7 @@ test("renders successful batches with aggregate completion and icon-only child r
   const tool = registeredTool();
   const result = {
     requested: 2,
-    results: [child(), child({ taskId: "task-2" as never, requestIndex: 1 })],
+    results: [child(), child({ taskId: taskIdFor(1), requestIndex: 1 })],
   };
   const output = render(
     tool,
@@ -162,13 +184,13 @@ test("returns simplified plain-text summaries for successful and mixed execution
       results: [
         child({ role: "explore" }),
         child({
-          taskId: "task-2" as never,
+          taskId: taskIdFor(1),
           requestIndex: 1,
-          status: "blocked" as const,
+          status: "blocked",
           role: "reviewer",
           sessionId: "session-2",
           paneClosed: false,
-          error: { code: "blocked" as const, message: "Please choose" },
+          error: { code: "blocked", message: "Please choose" },
         }),
       ],
     },

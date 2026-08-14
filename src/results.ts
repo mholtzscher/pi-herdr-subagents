@@ -1,5 +1,12 @@
 import { readFile } from "node:fs/promises";
+import { Type, type Static } from "typebox";
+import { Check } from "typebox/value";
 import type { TaskId } from "./domain.js";
+
+export interface ChildResultSummary {
+  summary: string;
+  truncated: boolean;
+}
 
 export interface ChildResultReader {
   read(input: {
@@ -7,18 +14,24 @@ export interface ChildResultReader {
     taskId: TaskId;
     baselineEntryId?: string;
     maxChars: number;
-  }): Promise<{ summary: string; truncated: boolean }>;
+  }): Promise<ChildResultSummary>;
 }
 
-type Entry = {
-  id?: string;
-  parentId?: string | null;
-  type?: string;
-  message?: {
-    role?: string;
-    content?: unknown;
-  };
-};
+const TextContentSchema = Type.String();
+const TextBlockSchema = Type.Object({ type: Type.Literal("text"), text: Type.String() });
+const ContentBlocksSchema = Type.Array(Type.Unknown());
+const EntryMessageSchema = Type.Object({
+  role: Type.Optional(Type.String()),
+  content: Type.Optional(Type.Unknown()),
+});
+const EntrySchema = Type.Object({
+  id: Type.Optional(Type.String()),
+  parentId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+  type: Type.Optional(Type.String()),
+  message: Type.Optional(EntryMessageSchema),
+});
+type Entry = Static<typeof EntrySchema>;
+type EntryMessage = Static<typeof EntryMessageSchema>;
 
 export class ResultAttributionError extends Error {}
 
@@ -28,7 +41,7 @@ export class JsonlChildResultReader implements ChildResultReader {
     taskId: TaskId;
     baselineEntryId?: string;
     maxChars: number;
-  }): Promise<{ summary: string; truncated: boolean }> {
+  }): Promise<ChildResultSummary> {
     let raw: string;
     try {
       raw = await readFile(input.sessionPath, "utf8");
@@ -38,9 +51,7 @@ export class JsonlChildResultReader implements ChildResultReader {
 
     const entries = parseEntries(raw);
     const marker = `<!-- pi-herdr-task:${input.taskId} -->`;
-    const marked = entries.filter(
-      (entry) => entry.message?.role === "user" && textOf(entry.message.content).includes(marker),
-    );
+    const marked = entries.filter((entry) => entry.message?.role === "user" && textOf(entry.message).includes(marker));
     if (marked.length !== 1 || !marked[0].id) throw new ResultAttributionError("Task marker is missing or ambiguous");
     const task = marked[0];
     const taskEntryId = task.id!;
@@ -71,7 +82,7 @@ export class JsonlChildResultReader implements ChildResultReader {
     const answer = answers.at(-1);
     if (!answer?.message) throw new ResultAttributionError("No final assistant response descends from the task marker");
 
-    const summary = textOf(answer.message.content);
+    const summary = textOf(answer.message);
     if (!summary) throw new ResultAttributionError("Final assistant response has no text");
     return truncate(summary, input.maxChars);
   }
@@ -80,10 +91,16 @@ export class JsonlChildResultReader implements ChildResultReader {
 function parseEntries(raw: string): Entry[] {
   const lines = raw.split("\n").filter(Boolean);
   try {
-    return lines.map((line) => JSON.parse(line) as Entry).filter((entry) => entry.type !== "session");
+    return lines.map(parseEntry).filter((entry) => entry.type !== "session");
   } catch {
     throw new ResultAttributionError("Child session contains malformed JSONL");
   }
+}
+
+function parseEntry(line: string): Entry {
+  const entry: unknown = JSON.parse(line);
+  if (!Check(EntrySchema, entry)) throw new ResultAttributionError("Child session contains malformed JSONL");
+  return entry;
 }
 
 function descendsFrom(id: string, ancestorId: string, entries: Map<string, Entry>): boolean {
@@ -98,26 +115,21 @@ function descendsFrom(id: string, ancestorId: string, entries: Map<string, Entry
   return false;
 }
 
-function textOf(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
+function textOf(message: EntryMessage): string {
+  const { content } = message;
+  if (Check(TextContentSchema, content)) return content;
+  if (!Check(ContentBlocksSchema, content)) return "";
   return content
-    .filter(
-      (block): block is { type: string; text: string } =>
-        Boolean(block) &&
-        typeof block === "object" &&
-        (block as { type?: unknown }).type === "text" &&
-        typeof (block as { text?: unknown }).text === "string",
-    )
+    .filter((block) => Check(TextBlockSchema, block))
     .map((block) => block.text)
     .join("");
 }
 
-function truncate(value: string, maxChars: number): { summary: string; truncated: boolean } {
+function truncate(value: string, maxChars: number): ChildResultSummary {
   if (value.length <= maxChars) return { summary: value, truncated: false };
   return { summary: value.slice(0, maxChars), truncated: true };
 }
 
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+function messageOf(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause);
 }

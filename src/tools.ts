@@ -98,9 +98,8 @@ export function registerSpawnPiTool(
       const batch = details.phase === "finished" ? details.result : undefined;
       const total = progress?.total ?? batch?.requested ?? tasks?.length ?? 0;
       const settled = new Map<number, ChildResult>();
-      for (const [index, result] of (progress?.results ?? batch?.results ?? []).entries()) {
-        const requestIndex = isChildResult(result) ? result.requestIndex : index;
-        settled.set(requestIndex, malformedChild(result));
+      for (const result of progress?.results ?? batch?.results ?? []) {
+        settled.set(result.requestIndex, result);
       }
       const state = batchDisplayState(details);
       const header =
@@ -128,7 +127,7 @@ function batchDisplayState(details: SpawnPiDisplayDetails): BatchDisplayState {
   if (details.phase === "working") return "working";
   const { requested, results } = details.result;
   if (results.length !== requested) return "incomplete";
-  const states = results.map(malformedChild).map(childDisplayState);
+  const states = results.map(childDisplayState);
   if (states.every((state) => state === "complete")) return "complete";
   if (states.every((state) => state === "complete" || state === "needs_input")) return "needs_input";
   return "incomplete";
@@ -213,42 +212,17 @@ function renderChild(
   return details.length ? `${line}\n${details.join("\n")}` : line;
 }
 
-function displayDetails(value: unknown, isPartial: boolean): SpawnPiDisplayDetails | undefined {
-  if (isSpawnPiDisplayDetails(value)) return value;
-  return !isPartial && isSpawnBatchResult(value) ? { phase: "finished", result: value } : undefined;
+function displayDetails(
+  value: SpawnPiDisplayDetails | SpawnBatchResult | undefined,
+  isPartial: boolean,
+): SpawnPiDisplayDetails | undefined {
+  if (value === undefined) return undefined;
+  if ("phase" in value) return value;
+  return isPartial ? undefined : { phase: "finished", result: value };
 }
 
-function isSpawnPiDisplayDetails(value: unknown): value is SpawnPiDisplayDetails {
-  if (!isRecord(value)) return false;
-  return (
-    (value.phase === "working" && isBatchProgress(value.progress)) ||
-    (value.phase === "finished" && isSpawnBatchResult(value.result))
-  );
-}
-
-function isBatchProgress(value: unknown): value is BatchProgress {
-  return (
-    isRecord(value) &&
-    typeof value.completed === "number" &&
-    typeof value.total === "number" &&
-    Array.isArray(value.results)
-  );
-}
-
-function isSpawnBatchResult(value: unknown): value is SpawnBatchResult {
-  return isRecord(value) && typeof value.requested === "number" && Array.isArray(value.results);
-}
-
-function isChildResult(value: unknown): value is ChildResult {
-  return isRecord(value) && typeof value.requestIndex === "number" && typeof value.taskId === "string";
-}
-
-function malformedChild(value: unknown): ChildResult {
-  return isRecord(value) ? (value as unknown as ChildResult) : ({} as ChildResult);
-}
-
-function requestedTasks(value: unknown): SpawnTask[] | undefined {
-  return isRecord(value) && Array.isArray(value.tasks) ? (value.tasks as SpawnTask[]) : undefined;
+function requestedTasks(value: { tasks?: SpawnTask[] }): SpawnTask[] | undefined {
+  return value.tasks;
 }
 
 function rawText(content: readonly { type: string; text?: string }[]): string {
@@ -257,7 +231,7 @@ function rawText(content: readonly { type: string; text?: string }[]): string {
 }
 
 function successfulCount(result: SpawnBatchResult | undefined): number {
-  return result?.results.filter((child) => isChildResult(child) && child.status === "succeeded").length ?? 0;
+  return result?.results.filter((child) => child.status === "succeeded").length ?? 0;
 }
 
 function finalBatchStatus(result: SpawnBatchResult, state: BatchDisplayState): string {
@@ -271,8 +245,8 @@ function orderedResults(results: ChildResult[]): ChildResult[] {
   return [...results].sort((left, right) => left.requestIndex - right.requestIndex);
 }
 
-function presentationRole(role: unknown): string | undefined {
-  if (typeof role !== "string") return undefined;
+function presentationRole(role: string | undefined): string | undefined {
+  if (role === undefined) return undefined;
   const value = Array.from(role, (character) => (isControlCharacter(character) ? " " : character))
     .join("")
     .replace(/\s+/g, " ")
@@ -305,8 +279,4 @@ function stateColor(state: ChildDisplayState | BatchDisplayState): ThemeColor {
       : state === "needs_input"
         ? "warning"
         : "error";
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }

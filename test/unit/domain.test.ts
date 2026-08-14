@@ -22,13 +22,10 @@ test("validates the fixed task limit and prompt", () => {
     () => validateSpawnBatchRequest({ tasks: [{ prompt: "inspect", model: "provider-only" }] }),
     RequestValidationError,
   );
-  assert.throws(
-    () =>
-      validateSpawnBatchRequest({
-        tasks: [{ prompt: "inspect", model: ["provider/first", "provider/second"] as unknown as string }],
-      }),
-    RequestValidationError,
+  const requestWithMultipleModels = JSON.parse(
+    '{"tasks":[{"prompt":"inspect","model":["provider/first","provider/second"]}]}',
   );
+  assert.throws(() => validateSpawnBatchRequest(requestWithMultipleModels), RequestValidationError);
 });
 
 test("builds the exact task marker envelope", () => {

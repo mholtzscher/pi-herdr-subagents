@@ -13,47 +13,66 @@ import {
 } from "../../src/orchestrator.js";
 import type { ChildRolesConfigLoadResult } from "../../src/model-routing.js";
 
-type Handler = (event: any, ctx: any) => any;
+type SessionEntry = { type: string; customType?: string; data?: unknown };
+type OrchestratorStateData = { enabled: boolean };
+type HarnessEvent = { reason?: "new" | "resume" | "fork"; previousSessionFile?: string; systemPrompt?: string };
+type HarnessContext = {
+  hasUI: boolean;
+  sessionManager: { getEntries: () => SessionEntry[] };
+  ui: {
+    theme: { fg: (name: string, value: string) => string };
+    setStatus: (key: string, value: string | undefined) => void;
+    notify: (message: string, level?: string) => void;
+  };
+};
+type Handler = (event: HarnessEvent, ctx: HarnessContext) => { systemPrompt: string } | void;
+type Command = { handler: (args: string, ctx: HarnessContext) => Promise<void> };
 
 function harness(configResult: ChildRolesConfigLoadResult, activeTools = ["spawn_pi"]) {
   const handlers = new Map<string, Handler[]>();
-  const commands = new Map<string, any>();
-  const appended: Array<{ customType: string; data: unknown }> = [];
+  const commands = new Map<string, Command>();
+  const appended: Array<{ customType: string; data: OrchestratorStateData }> = [];
   const notifications: Array<{ message: string; level?: string }> = [];
   const statuses: Array<string | undefined> = [];
-  const pi = {
-    registerCommand(name: string, command: unknown) {
-      commands.set(name, command);
-    },
-    on(name: string, handler: Handler) {
-      handlers.set(name, [...(handlers.get(name) ?? []), handler]);
-    },
-    appendEntry(customType: string, data: unknown) {
-      appended.push({ customType, data });
-    },
-    getActiveTools() {
-      return activeTools;
-    },
-  } as unknown as ExtensionAPI;
-  const ctx = {
+  let sessionEntries: SessionEntry[] = [];
+  const ctx: HarnessContext = {
     hasUI: true,
-    sessionManager: { getEntries: () => [] },
+    sessionManager: { getEntries: () => sessionEntries },
     ui: {
       theme: { fg: (_name: string, value: string) => value },
       setStatus: (_key: string, value: string | undefined) => statuses.push(value),
       notify: (message: string, level?: string) => notifications.push({ message, level }),
     },
   };
+  // SAFETY: This test double provides every ExtensionAPI member registerOrchestrator invokes with behavior captured by this harness.
+  const pi = {
+    registerCommand(name: string, command: Command) {
+      commands.set(name, command);
+    },
+    on(name: string, handler: Handler) {
+      handlers.set(name, [...(handlers.get(name) ?? []), handler]);
+    },
+    appendEntry(customType: string, data: OrchestratorStateData) {
+      appended.push({ customType, data });
+    },
+    getActiveTools() {
+      return activeTools;
+    },
+  } as ExtensionAPI;
   registerOrchestrator(pi, configResult);
+  const command = commands.get("orchestrator");
+  if (!command) throw new Error("orchestrator command was not registered");
   return {
-    handlers,
-    command: commands.get("orchestrator"),
+    command,
     appended,
     notifications,
     statuses,
     ctx,
-    emit(name: string, event: unknown, context = ctx) {
-      let result: unknown;
+    setEntries(entries: SessionEntry[]) {
+      sessionEntries = entries;
+    },
+    emit(name: string, event: HarnessEvent, context = ctx) {
+      let result: { systemPrompt: string } | void = undefined;
       for (const handler of handlers.get(name) ?? []) result = handler(event, context);
       return result;
     },
@@ -140,9 +159,7 @@ test("restores state across branches and forks inherit the source session curren
         ].join("\n"),
       );
       const h = harness({ ...enabledConfig, config: { ...enabledConfig.config, orchestrator: { enabled: false } } });
-      (h.ctx.sessionManager as { getEntries: () => unknown[] }).getEntries = () => [
-        { type: "custom", customType: ORCHESTRATOR_STATE_ENTRY, data: { enabled: false } },
-      ];
+      h.setEntries([{ type: "custom", customType: ORCHESTRATOR_STATE_ENTRY, data: { enabled: false } }]);
       h.emit("session_start", { reason: "fork", previousSessionFile: source });
       assert.deepEqual(h.appended.at(-1), { customType: ORCHESTRATOR_STATE_ENTRY, data: { enabled: true } });
       assert.deepEqual(h.emit("before_agent_start", { systemPrompt: "base" }), {
@@ -171,9 +188,7 @@ test("keeps enabled preference while spawn_pi is temporarily inactive", async ()
   await withParentEnvironment(async () => {
     const activeTools: string[] = [];
     const h = harness(enabledConfig, activeTools);
-    (h.ctx.sessionManager as { getEntries: () => unknown[] }).getEntries = () => [
-      { type: "custom", customType: ORCHESTRATOR_STATE_ENTRY, data: { enabled: true } },
-    ];
+    h.setEntries([{ type: "custom", customType: ORCHESTRATOR_STATE_ENTRY, data: { enabled: true } }]);
     h.emit("session_start", { reason: "resume" });
     assert.equal(h.emit("before_agent_start", { systemPrompt: "base" }), undefined);
     activeTools.push("spawn_pi");
@@ -187,9 +202,7 @@ test("disables and persists while spawn_pi is inactive", async () => {
   await withParentEnvironment(async () => {
     const activeTools: string[] = [];
     const h = harness(enabledConfig, activeTools);
-    (h.ctx.sessionManager as { getEntries: () => unknown[] }).getEntries = () => [
-      { type: "custom", customType: ORCHESTRATOR_STATE_ENTRY, data: { enabled: true } },
-    ];
+    h.setEntries([{ type: "custom", customType: ORCHESTRATOR_STATE_ENTRY, data: { enabled: true } }]);
     h.emit("session_start", { reason: "resume" });
 
     await h.command.handler("off", h.ctx);
