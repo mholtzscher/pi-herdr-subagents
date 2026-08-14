@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.1](https://github.com/mholtzscher/pi-herdr-subagents/compare/v1.2.0...v1.2.1) (2026-08-14)
+
+
+### Bug Fixes
+
+* **herdr:** wait for a stable foreground shell before starting children ([8c802e9](https://github.com/mholtzscher/pi-herdr-subagents/commit/8c802e907c948d333a23c55b0b4b818c816f7b72))
+* **herdr:** wait for a stable foreground shell before starting children ([cf07964](https://github.com/mholtzscher/pi-herdr-subagents/commit/cf07964c86292dd42b4ffde5b0498ebbf6f00402))
+* resolve anti-slop lint violations ([f5c6ac3](https://github.com/mholtzscher/pi-herdr-subagents/commit/f5c6ac383f41c5d1b49ece14038b52e41e418146))
+* resolve anti-slop lint violations ([617698b](https://github.com/mholtzscher/pi-herdr-subagents/commit/617698b2580d16f055794be023d82da7d43f3d10))
+* **spawn:** simplify completed task output ([a81acb8](https://github.com/mholtzscher/pi-herdr-subagents/commit/a81acb8053b2f76872f3becea02f81139c49feb0))
+* **spawn:** simplify completed task output ([4c2efcb](https://github.com/mholtzscher/pi-herdr-subagents/commit/4c2efcb18dc42aeb51eeea6e253322d9b8b81964))
+
 ## [1.2.0](https://github.com/mholtzscher/pi-herdr-subagents/compare/v1.1.1...v1.2.0) (2026-08-13)
 
 
