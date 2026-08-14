@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type, type Static } from "typebox";
 import { Check } from "typebox/value";
-import { roleGuidance, type ChildRolesConfigLoadResult } from "./model-routing.js";
+import type { ChildRolesConfigLoadResult } from "./model-routing.js";
 
 export const ORCHESTRATOR_STATE_ENTRY = "pi-herdr-orchestrator-state";
 export const ORCHESTRATOR_INSTRUCTIONS = `Orchestrator mode is enabled. You are the Parent Pi. You own task decomposition, delegation, coordination, synthesis, and final verification.
@@ -95,8 +95,9 @@ export function registerOrchestrator(pi: ExtensionAPI, configResult: ChildRolesC
           : unavailableMessage(configResult);
         const roles =
           isAvailable && configResult.ok
-            ? (roleGuidance(configResult.config)?.replace("Configured Child Roles: ", "").replaceAll("; ", " · ") ??
-              "none")
+            ? Object.entries(configResult.config.roles)
+                .map(([name, role]) => (role.description ? `${name} (${role.description})` : name))
+                .join(" · ") || "none"
             : undefined;
         ctx.ui.notify(roles ? `${message}\n  Roles  ${roles}` : message, isAvailable ? "info" : "warning");
         return;

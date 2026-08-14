@@ -153,7 +153,7 @@ test("status reports configured Child Roles and descriptions", async () => {
       config: {
         ...enabledConfig.config,
         roles: {
-          explore: { description: "Read-only reconnaissance.", prompt: "Inspect only." },
+          explore: { description: "Read-only; reconnaissance.", prompt: "Inspect only." },
           reviewer: { prompt: "Review changes." },
         },
       },
@@ -163,7 +163,7 @@ test("status reports configured Child Roles and descriptions", async () => {
     await h.command.handler("status", h.ctx);
 
     assert.deepEqual(h.notifications.at(-1), {
-      message: "● Orchestrator enabled\n  Roles  explore (Read-only reconnaissance.) · reviewer",
+      message: "● Orchestrator enabled\n  Roles  explore (Read-only; reconnaissance.) · reviewer",
       level: "info",
     });
   });
