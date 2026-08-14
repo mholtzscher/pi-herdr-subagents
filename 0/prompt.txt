@@ -1,0 +1,5 @@
+how does the plugin tell agent what roles are available?
+
+---
+
+can we have the /orchestrator status print the available roles and descriptions?
