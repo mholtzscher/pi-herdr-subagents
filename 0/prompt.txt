@@ -1,0 +1,1 @@
+i want to move the placement config to be based out of the json config instead of letting the agent control it. help me plan that work
