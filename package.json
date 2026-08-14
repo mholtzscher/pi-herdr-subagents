@@ -16,7 +16,8 @@
     "test": "tsx --test test/**/*.test.ts"
   },
   "dependencies": {
-    "mnemonic-id": "^4.1.0"
+    "mnemonic-id": "^4.1.0",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@earendil-works/pi-ai": "0.84.1",

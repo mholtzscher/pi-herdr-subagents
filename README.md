@@ -22,26 +22,49 @@ Orchestrator state is session-wide and survives resume, reload, and tree navigat
 
 ### Child roles and runtime defaults
 
-Optionally copy [`herdr-subagents.example.json`](./herdr-subagents.example.json) to `~/.pi/agent/herdr-subagents.json` and customize it:
+Copy the shipped global config and role catalogue, then customize them:
+
+```bash
+cp herdr-subagents.example.json ~/.pi/agent/herdr-subagents.json
+cp -R herdr-subagents.example ~/.pi/agent/herdr-subagents
+```
+
+The global config contains only Orchestrator and runtime defaults:
 
 ```json
 {
   "orchestrator": { "enabled": false },
-  "defaults": { "model": ["openai/gpt-5.6-terra", "openai/gpt-5.6-sol"], "thinking": "medium" },
-  "roles": {
-    "explore": {
-      "description": "Fast, read-oriented repository exploration",
-      "prompt": "Map relevant code and report evidence. Do not edit unless explicitly asked.",
-      "model": ["openai/gpt-5.6-sol", "openai/gpt-5.6-terra"],
-      "thinking": "low"
-    }
+  "defaults": {
+    "model": ["openai-codex/gpt-5.6-luna", "openai-codex/gpt-5.6-sol"],
+    "thinking": "medium"
   }
 }
 ```
 
-Tasks can set `role`, `model`, and `thinking`. Model and thinking resolve independently: task override, role, configured default, then Parent setting. Config `defaults.model` and `roles.<name>.model` accept either one exact `provider/model-id` string or a non-empty ordered array of them (model IDs may contain `/`). The selected config layer is tried in order against available models; if none is available, the task fails rather than falling through to a lower-precedence layer. Task overrides remain a single string, and inherited Parent models are not availability-validated. A role supplies only an appended identity prompt; it does not replace Pi's system prompt, tools, or project context. The configured role descriptions are visible to Parent Pi, but role prompts and model mappings are not. Config is loaded when the extension loads, so `/reload` picks up edits for future fresh sessions; it does not reset the current session's orchestrator state. Invalid configuration disables orchestrator mode with a warning and blocks a batch before Herdr is inspected.
+Each role is a Markdown document in `~/.pi/agent/herdr-subagents/roles/`. Its filename stem is the case-sensitive role name. Put optional `description`, `model`, and `thinking` metadata in YAML frontmatter; the trimmed document body is the appended identity prompt:
 
-Role prompts are passed as local process arguments. Do not put secrets in them. The extension prefixes them as literal Child role instructions so Pi does not interpret prompts that happen to match paths in the Child working directory as files.
+```md
+---
+description: Read-only codebase reconnaissance and evidence gathering.
+model:
+  - openai-codex/gpt-5.6-luna
+  - openai-codex/gpt-5.6-sol
+thinking: low
+---
+
+Act as a read-only repository investigator.
+
+Locate the relevant entry points, trace important control flow, and cite file
+paths and line ranges. Do not modify files.
+```
+
+Tasks can set `role`, `model`, and `thinking`. Model and thinking resolve independently: task override, role, configured default, then Parent setting. Config `defaults.model` and role frontmatter `model` accept either one exact `provider/model-id` string or a non-empty ordered array of them (model IDs may contain `/`). The selected config layer is tried in order against available models; if none is available, the task fails rather than falling through to a lower-precedence layer. Task overrides remain a single string, and inherited Parent models are not availability-validated. A role supplies only an appended identity prompt; it does not replace Pi's system prompt, tools, or project context. The configured role descriptions are visible to Parent Pi, but role prompts and model mappings are not.
+
+This replaces the former JSON `roles` property. Move each old `roles.<name>` entry to `herdr-subagents/roles/<name>.md`, put `description`, `model`, and `thinking` in frontmatter, put `prompt` in the body, and remove `roles` from the JSON file. Inline JSON roles are rejected; there is no automated migration command.
+
+Configuration is loaded when the extension loads. Run `/reload` after editing either the JSON config or a role document to apply changes to future fresh sessions; it does not reset the current session's Orchestrator state. Invalid configuration disables Orchestrator mode with a warning and blocks a batch before Herdr is inspected.
+
+Role prompts must not contain secrets. The extension writes the literal Child role instruction heading and prompt to a private temporary file, then passes that file to Pi; prompt contents are not placed in process arguments.
 
 At session start, the extension generates and stores a short internal Parent label (for example, `amber-finch`). The Parent tab is renamed `Pi [<parent>]`; each child tab, pane, and Pi session is named `Pi [<parent>] task-N` (for example, `Pi [amber-finch] task-1`). The label is unrelated to the Parent Pi's `/name` and does not affect the `/resume` list. This keeps children from concurrent Parent Pis distinguishable. Successful results include a child session ID. Closing the child pane does **not** delete that session; resume it with:
 

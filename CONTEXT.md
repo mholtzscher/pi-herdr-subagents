@@ -22,6 +22,15 @@ One tool invocation containing one or more independent child tasks.
 **Child Task**  
 One bounded prompt assigned to one fresh Child Pi. It may request a configured Child Role plus model and thinking overrides.
 
+**Child Role**
+A filename-named set of appended identity guidance and optional runtime metadata loaded from a Role Document. It does not replace Pi's normal system or project context.
+
+**Role Document**
+One Markdown file in the Role Catalogue. Its filename stem is the case-sensitive Child Role name, optional YAML frontmatter holds `description`, `model`, and `thinking`, and its trimmed body is the role prompt.
+
+**Role Catalogue**
+The fixed `herdr-subagents/roles/` directory beside the global `herdr-subagents.json` config. It is loaded as direct regular `.md` files only.
+
 **Child Result**  
 The concise final answer attributed to a Child Task, with status and resumable Pi session identity.
 
@@ -39,7 +48,7 @@ A failed, blocked, interrupted, or unattributable Child Pi left visible for huma
 - Every Child Task gets a fresh Pi session and fresh context window.
 - A Child Pi receives exactly one orchestrated task.
 - Tasks in a Batch are independent and run concurrently.
-- Children use the Parent Pi's current checkout and normal Pi coding tools. A configured role appends identity guidance without replacing Pi's normal system or project context.
+- Children use the Parent Pi's current checkout and normal Pi coding tools. A configured Child Role appends identity guidance without replacing Pi's normal system or project context.
 - Concurrent children may edit the same checkout; the extension does not prevent or reconcile conflicts.
 - A successful result comes from the marked child Pi session, not terminal scraping.
 - A Collected Child is closed only after its result and session ID are safely read.

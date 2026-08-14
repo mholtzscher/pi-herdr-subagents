@@ -11,6 +11,9 @@ importers:
       mnemonic-id:
         specifier: ^4.1.0
         version: 4.1.0
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
     devDependencies:
       '@earendil-works/pi-ai':
         specifier: 0.84.1

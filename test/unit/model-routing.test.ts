@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -34,67 +34,190 @@ function resolve(
   return resolveChildRuntime({ task, parent, routing: { config, availableModels } });
 }
 
-test("loads missing config as empty and validates the complete config shape", () => {
+test("loads global config and role catalogue independently", () => {
   const directory = mkdtempSync(join(tmpdir(), "child-roles-"));
-  const path = join(directory, "herdr-subagents.json");
+  const path = join(directory, "custom.config.json");
+  const rolesPath = join(directory, "custom.config", "roles");
   try {
     assert.deepEqual(loadChildRolesConfig(path), {
       ok: true,
       path,
       config: { orchestrator: { enabled: false }, defaults: {}, roles: {} },
     });
+
+    mkdirSync(rolesPath, { recursive: true });
+    writeFileSync(join(rolesPath, "body-only.md"), "\n  Investigate.\n\n- Keep evidence.\n  ");
+    writeFileSync(join(rolesPath, "scalar.md"), "---\nmodel: provider/one\n---\nScalar prompt");
+    writeFileSync(join(rolesPath, "empty-metadata.md"), "---\n---\nEmpty metadata prompt");
     writeFileSync(
-      path,
-      JSON.stringify({
-        orchestrator: { enabled: true },
-        defaults: { model: "provider/a/b" },
-        roles: { explore: { prompt: "Explore.", model: ["provider/first", "provider/a/b"] } },
-      }),
+      join(rolesPath, "explore.md"),
+      [
+        "---",
+        "description: Read-only exploration",
+        "model:",
+        "  - provider/first",
+        "  - provider/a/b",
+        "thinking: low",
+        "---",
+        "",
+        "Explore the repository.",
+      ].join("\n"),
     );
-    const loaded = loadChildRolesConfig(path);
+    let loaded = loadChildRolesConfig(path);
+    assert.equal(loaded.ok, true);
+    if (loaded.ok) {
+      assert.equal(loaded.config.orchestrator.enabled, false);
+      assert.deepEqual(loaded.config.roles["body-only"], { prompt: "Investigate.\n\n- Keep evidence." });
+      assert.deepEqual(loaded.config.roles.scalar, { model: "provider/one", prompt: "Scalar prompt" });
+      assert.deepEqual(loaded.config.roles["empty-metadata"], { prompt: "Empty metadata prompt" });
+      assert.deepEqual(loaded.config.roles.explore, {
+        description: "Read-only exploration",
+        model: ["provider/first", "provider/a/b"],
+        thinking: "low",
+        prompt: "Explore the repository.",
+      });
+    }
+
+    writeFileSync(path, JSON.stringify({ orchestrator: { enabled: true }, defaults: { model: "provider/a/b" } }));
+    loaded = loadChildRolesConfig(path);
     assert.equal(loaded.ok, true);
     if (loaded.ok) {
       assert.equal(loaded.config.orchestrator.enabled, true);
       assert.equal(loaded.config.defaults.model, "provider/a/b");
-      assert.deepEqual(loaded.config.roles.explore.model, ["provider/first", "provider/a/b"]);
+      assert.equal(loaded.config.roles.explore.prompt, "Explore the repository.");
     }
-
-    for (const model of [[], [""], [42], [" provider/model"], ["provider/model "], ["provider"], ["/model"]]) {
-      writeFileSync(path, JSON.stringify({ defaults: { model } }));
-      assert.match(errorOf(loadChildRolesConfig(path)), /exact provider\/model-id|non-empty array/);
-    }
-    writeFileSync(path, JSON.stringify({ roles: { explore: { prompt: "Explore.", model: [] } } }));
-    assert.match(errorOf(loadChildRolesConfig(path)), /non-empty array/);
-
-    for (const orchestrator of [true, {}, { enabled: "yes" }, { enabled: true, prompt: "no" }]) {
-      writeFileSync(path, JSON.stringify({ orchestrator }));
-      assert.match(errorOf(loadChildRolesConfig(path)), /orchestrator/);
-    }
-
-    writeFileSync(path, JSON.stringify({ roles: { "   ": { prompt: "Explore." } } }));
-    assert.match(errorOf(loadChildRolesConfig(path)), /role names/);
-    writeFileSync(path, JSON.stringify({ defaults: { prompt: "no" } }));
-    assert.match(errorOf(loadChildRolesConfig(path)), /not supported/);
-    writeFileSync(path, "{");
-    assert.equal(loadChildRolesConfig(path).ok, false);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
 });
 
-test("preserves literal role prompts that happen to name existing files", () => {
+test("discovers only sorted direct regular exact-.md files", () => {
   const directory = mkdtempSync(join(tmpdir(), "child-roles-"));
-  const promptPath = join(directory, "prompt.txt");
-  const configPath = join(directory, "herdr-subagents.json");
+  const path = join(directory, "herdr-subagents.json");
+  const rolesPath = join(directory, "herdr-subagents", "roles");
   try {
-    writeFileSync(promptPath, "not a prompt");
-    writeFileSync(configPath, JSON.stringify({ roles: { explore: { prompt: promptPath } } }));
-    const loaded = loadChildRolesConfig(configPath);
+    mkdirSync(join(rolesPath, "nested"), { recursive: true });
+    mkdirSync(join(rolesPath, "directory.md"));
+    writeFileSync(join(rolesPath, "z.md"), "Z prompt");
+    writeFileSync(join(rolesPath, "a.md"), "A prompt");
+    writeFileSync(join(rolesPath, "ignored.MD"), "ignored");
+    writeFileSync(join(rolesPath, "nested", "nested.md"), "ignored");
+    symlinkSync(join(rolesPath, "a.md"), join(rolesPath, "link.md"));
+
+    const loaded = loadChildRolesConfig(path);
     assert.equal(loaded.ok, true);
-    if (loaded.ok) assert.equal(loaded.config.roles.explore.prompt, promptPath);
+    if (loaded.ok) assert.deepEqual(Object.keys(loaded.config.roles), ["a", "z"]);
+
+    writeFileSync(join(rolesPath, "b.md"), "---\nunknown: true\n---\nPrompt");
+    writeFileSync(join(rolesPath, "0.md"), "---\nunknown: true\n---\nPrompt");
+    const invalid = loadChildRolesConfig(path);
+    assert.equal(invalid.ok, false);
+    if (!invalid.ok) assert.equal(invalid.path, join(rolesPath, "0.md"));
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test("rejects invalid role documents and identifies their source", () => {
+  const cases: [string, RegExp][] = [
+    ["   \n", /prompt/],
+    ["---\ndescription: nope\nPrompt", /Unterminated/],
+    ["---\n[broken\n---\nPrompt", /Flow sequence|YAML/],
+    ["---\ndescription: one\ndescription: two\n---\nPrompt", /Map keys must be unique/],
+    ["---\nmetadata\n---\nPrompt", /frontmatter must be an object/],
+    ["---\nunknown: true\n---\nPrompt", /not supported/],
+    ["---\ndescription: !custom value\n---\nPrompt", /tag|Tag/],
+    ["---\ndescription: '   '\n---\nPrompt", /non-whitespace/],
+    ["---\nmodel: []\n---\nPrompt", /non-empty array/],
+    ["---\nmodel: provider\n---\nPrompt", /exact provider\/model-id/],
+    ["---\nthinking: huge\n---\nPrompt", /must be one of/],
+  ];
+
+  for (const [contents, expected] of cases) {
+    const directory = mkdtempSync(join(tmpdir(), "child-roles-"));
+    const path = join(directory, "herdr-subagents.json");
+    const documentPath = join(directory, "herdr-subagents", "roles", "explore.md");
+    try {
+      mkdirSync(join(directory, "herdr-subagents", "roles"), { recursive: true });
+      writeFileSync(documentPath, contents);
+      const loaded = loadChildRolesConfig(path);
+      assert.equal(loaded.ok, false);
+      if (!loaded.ok) {
+        assert.equal(loaded.path, documentPath);
+        assert.match(loaded.error, expected);
+      }
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }
+});
+
+test("validates global config and reports the JSON roles migration", () => {
+  const directory = mkdtempSync(join(tmpdir(), "child-roles-"));
+  const path = join(directory, "herdr-subagents.json");
+  try {
+    for (const model of [[], [""], [42], [" provider/model"], ["provider/model "], ["provider"], ["/model"]]) {
+      writeFileSync(path, JSON.stringify({ defaults: { model } }));
+      assert.match(errorOf(loadChildRolesConfig(path)), /exact provider\/model-id|non-empty array/);
+    }
+    for (const orchestrator of [true, {}, { enabled: "yes" }, { enabled: true, prompt: "no" }]) {
+      writeFileSync(path, JSON.stringify({ orchestrator }));
+      assert.match(errorOf(loadChildRolesConfig(path)), /orchestrator/);
+    }
+    writeFileSync(path, JSON.stringify({ roles: { explore: { prompt: "Explore." } } }));
+    assert.match(
+      errorOf(loadChildRolesConfig(path)),
+      /config\.roles is no longer supported.*herdr-subagents\/roles\/<name>\.md/,
+    );
+    writeFileSync(path, JSON.stringify({ defaults: { prompt: "no" } }));
+    assert.match(errorOf(loadChildRolesConfig(path)), /not supported/);
+    writeFileSync(path, "{");
+    const malformed = loadChildRolesConfig(path);
+    assert.equal(malformed.ok, false);
+    if (!malformed.ok) assert.equal(malformed.path, path);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("rejects a whitespace-only filename-derived role name", () => {
+  const directory = mkdtempSync(join(tmpdir(), "child-roles-"));
+  const path = join(directory, "herdr-subagents.json");
+  const documentPath = join(directory, "herdr-subagents", "roles", "   .md");
+  try {
+    mkdirSync(join(directory, "herdr-subagents", "roles"), { recursive: true });
+    writeFileSync(documentPath, "Prompt");
+    const loaded = loadChildRolesConfig(path);
+    assert.equal(loaded.ok, false);
+    if (!loaded.ok) {
+      assert.equal(loaded.path, documentPath);
+      assert.match(loaded.error, /role names/);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("reports an unreadable catalogue path", () => {
+  const directory = mkdtempSync(join(tmpdir(), "child-roles-"));
+  const path = join(directory, "herdr-subagents.json");
+  const rolesPath = join(directory, "herdr-subagents", "roles");
+  try {
+    mkdirSync(join(directory, "herdr-subagents"));
+    writeFileSync(rolesPath, "not a directory");
+    const loaded = loadChildRolesConfig(path);
+    assert.equal(loaded.ok, false);
+    if (!loaded.ok) assert.equal(loaded.path, rolesPath);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("loads the shipped global config and role examples", () => {
+  const path = join(process.cwd(), "herdr-subagents.example.json");
+  const loaded = loadChildRolesConfig(path);
+  assert.equal(loaded.ok, true);
+  if (loaded.ok) assert.deepEqual(Object.keys(loaded.config.roles), ["explore", "reviewer"]);
 });
 
 test("rejects inherited object properties as unknown roles", () => {

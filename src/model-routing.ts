@@ -1,8 +1,9 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync, readdirSync } from "node:fs";
+import { extname, join } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { Check } from "typebox/value";
+import { parseDocument as parseYamlDocument } from "yaml";
 import type {
   ChildRuntimeSelection,
   ChildThinkingLevel,
@@ -61,6 +62,21 @@ interface ConfigObject {
 
 type ConfigInput = string | number | boolean | null | ConfigInput[] | ConfigObject;
 
+interface RoleFrontmatter {
+  description?: string;
+  model?: ConfiguredModel;
+  thinking?: ChildThinkingLevel;
+}
+
+class ConfigSourceError extends Error {
+  constructor(
+    readonly path: string,
+    cause: unknown,
+  ) {
+    super(cause instanceof Error ? cause.message : String(cause));
+  }
+}
+
 interface Selection<T> {
   value: T | undefined;
   source?: SelectionSource;
@@ -80,13 +96,22 @@ const ThinkingLevelSchema = Type.Union([
 const THINKING_LEVELS: readonly ChildThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
 export function loadChildRolesConfig(path = join(getAgentDir(), "herdr-subagents.json")): ChildRolesConfigLoadResult {
-  if (!existsSync(path))
-    return { ok: true, path, config: { orchestrator: { enabled: false }, defaults: {}, roles: {} } };
+  const rolesPath = rolesDirectoryFor(path);
+  let globalConfig: Omit<HerdrSubagentsConfig, "roles"> = { orchestrator: { enabled: false }, defaults: {} };
+
   try {
     const value: ConfigInput = JSON.parse(readFileSync(path, "utf8"));
-    return { ok: true, path, config: parseConfig(value) };
+    globalConfig = parseConfig(value, rolesPath);
   } catch (error) {
-    return { ok: false, path, error: error instanceof Error ? error.message : String(error) };
+    if (!(error instanceof Error) || !isMissing(error))
+      return { ok: false, path, error: error instanceof Error ? error.message : String(error) };
+  }
+
+  try {
+    return { ok: true, path, config: { ...globalConfig, roles: loadRolesDirectory(rolesPath) } };
+  } catch (error) {
+    const source = error instanceof ConfigSourceError ? error.path : rolesPath;
+    return { ok: false, path: source, error: error instanceof Error ? error.message : String(error) };
   }
 }
 
@@ -157,13 +182,101 @@ export function roleGuidance(config: ChildRolesConfig): string | undefined {
   return `Configured Child Roles: ${roles.map(([name, role]) => (role.description ? `${name} (${role.description})` : name)).join("; ")}`;
 }
 
-function parseConfig(value: ConfigInput): HerdrSubagentsConfig {
+function rolesDirectoryFor(configPath: string): string {
+  const extension = extname(configPath);
+  return join(extension ? configPath.slice(0, -extension.length) : configPath, "roles");
+}
+
+function loadRolesDirectory(path: string): Record<string, ChildRole> {
+  let entries;
+  try {
+    entries = readdirSync(path, { withFileTypes: true });
+  } catch (error) {
+    if (error instanceof Error && isMissing(error)) return {};
+    throw new ConfigSourceError(path, error);
+  }
+
+  const roles: [string, ChildRole][] = [];
+  for (const entry of entries.sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0))) {
+    if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
+    const name = entry.name.slice(0, -3);
+    const documentPath = join(path, entry.name);
+    try {
+      if (!nonWhitespace(name)) throw new Error("role names must be non-whitespace strings");
+      roles.push([name, parseRoleDocument(readFileSync(documentPath, "utf8"), documentPath)]);
+    } catch (error) {
+      throw new ConfigSourceError(documentPath, error);
+    }
+  }
+  return Object.fromEntries(roles);
+}
+
+function parseRoleDocument(contents: string, path: string): RoleFrontmatter & { prompt: string } {
+  let frontmatter: RoleFrontmatter = {};
+  let prompt = contents;
+  const openingLength = contents.startsWith("---\r\n")
+    ? 5
+    : contents.startsWith("---\n")
+      ? 4
+      : contents === "---"
+        ? 3
+        : 0;
+
+  if (openingLength) {
+    let lineStart = openingLength;
+    let closingStart = -1;
+    let bodyStart = -1;
+    while (lineStart <= contents.length) {
+      const newline = contents.indexOf("\n", lineStart);
+      const lineEnd = newline === -1 ? contents.length : newline;
+      const line = contents.slice(lineStart, lineEnd).replace(/\r$/, "");
+      if (line === "---") {
+        closingStart = lineStart;
+        bodyStart = newline === -1 ? contents.length : newline + 1;
+        break;
+      }
+      if (newline === -1) break;
+      lineStart = newline + 1;
+    }
+    if (closingStart === -1) throw new Error(`Unterminated YAML frontmatter in ${path}`);
+    const document = parseYamlDocument(contents.slice(openingLength, closingStart), {
+      version: "1.2",
+      uniqueKeys: true,
+      customTags: [],
+    });
+    const yamlProblem = document.errors[0] ?? document.warnings[0];
+    if (yamlProblem) throw yamlProblem;
+    const value: unknown = document.toJS({ maxAliasCount: 100 });
+    if (value !== null && value !== undefined && !Check(ObjectSchema, value))
+      throw new Error("frontmatter must be an object");
+    // SAFETY: YAML returned nullish empty frontmatter or TypeBox verified an object with ConfigInput-compatible fields.
+    frontmatter = parseRoleFrontmatter(value as ConfigObject | null | undefined, "frontmatter");
+    prompt = contents.slice(bodyStart);
+  }
+
+  return { ...frontmatter, prompt: parseNonWhitespace(prompt.trim(), "prompt") };
+}
+
+function parseRoleFrontmatter(value: ConfigObject | null | undefined, name: string): RoleFrontmatter {
+  if (value === null || value === undefined) return {};
+  const metadata = parseObject(value, name);
+  rejectUnsupported(metadata, ["description", "model", "thinking"], name);
+  const result: RoleFrontmatter = {};
+  if (metadata.description !== undefined)
+    result.description = parseNonWhitespace(metadata.description, `${name}.description`);
+  if (metadata.model !== undefined) result.model = validateModel(metadata.model, `${name}.model`);
+  if (metadata.thinking !== undefined) result.thinking = validateThinking(metadata.thinking, `${name}.thinking`);
+  return result;
+}
+
+function parseConfig(value: ConfigInput, rolesPath: string): Omit<HerdrSubagentsConfig, "roles"> {
   const config = parseObject(value, "config");
-  rejectUnsupported(config, ["orchestrator", "defaults", "roles"], "config");
+  if (Object.prototype.hasOwnProperty.call(config, "roles"))
+    throw new Error(`config.roles is no longer supported; move each role to ${join(rolesPath, "<name>.md")}`);
+  rejectUnsupported(config, ["orchestrator", "defaults"], "config");
   const orchestrator = config.orchestrator === undefined ? { enabled: false } : parseOrchestrator(config.orchestrator);
   const defaults = config.defaults === undefined ? {} : parseDefaults(config.defaults, "defaults");
-  const roles = config.roles === undefined ? {} : parseRoles(config.roles);
-  return { orchestrator, defaults, roles };
+  return { orchestrator, defaults };
 }
 
 function parseOrchestrator(value: ConfigInput): OrchestratorConfig {
@@ -179,26 +292,6 @@ function parseDefaults(value: ConfigInput, name: string): ChildRuntimeDefaults {
   const result: ChildRuntimeDefaults = {};
   if (defaults.model !== undefined) result.model = validateModel(defaults.model, `${name}.model`);
   if (defaults.thinking !== undefined) result.thinking = validateThinking(defaults.thinking, `${name}.thinking`);
-  return result;
-}
-
-function parseRoles(value: ConfigInput): Record<string, ChildRole> {
-  const roles = parseObject(value, "roles");
-  return Object.fromEntries(
-    Object.entries(roles).map(([name, role]) => {
-      if (!nonWhitespace(name)) throw new Error("role names must be non-whitespace strings");
-      return [name, parseRole(role, `roles.${JSON.stringify(name)}`)];
-    }),
-  );
-}
-
-function parseRole(value: ConfigInput, name: string): ChildRole {
-  const role = parseObject(value, name);
-  rejectUnsupported(role, ["description", "prompt", "model", "thinking"], name);
-  const result: ChildRole = { prompt: parseNonWhitespace(role.prompt, `${name}.prompt`) };
-  if (role.description !== undefined) result.description = parseNonWhitespace(role.description, `${name}.description`);
-  if (role.model !== undefined) result.model = validateModel(role.model, `${name}.model`);
-  if (role.thinking !== undefined) result.thinking = validateThinking(role.thinking, `${name}.thinking`);
   return result;
 }
 
@@ -266,7 +359,7 @@ function withoutRolePrompt(selection: ChildRuntimeSelection): Omit<ChildRuntimeS
 
 function parseObject(value: ConfigInput, name: string): ConfigObject {
   if (!Check(ObjectSchema, value)) throw new Error(`${name} must be an object`);
-  // SAFETY: TypeBox verified that the JSON value is an object, and ConfigInput's only object member is ConfigObject.
+  // SAFETY: TypeBox verified that the value is an object, and ConfigInput's only object member is ConfigObject.
   return value as ConfigObject;
 }
 
@@ -282,6 +375,10 @@ function nonWhitespace(value: ConfigInput): value is string {
 function parseNonWhitespace(value: ConfigInput | undefined, name: string): string {
   if (value === undefined || !nonWhitespace(value)) throw new Error(`${name} must be a non-whitespace string`);
   return value;
+}
+
+function isMissing(error: Error): boolean {
+  return error instanceof Error && "code" in error && error.code === "ENOENT";
 }
 
 export function emptyChildRolesConfig(): ChildRolesConfig {

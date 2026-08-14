@@ -1,9 +1,13 @@
 # Child Roles — Implementation Spec
 
-**Status:** Implemented
+**Status:** Superseded by [`markdown-role-catalogue.md`](./markdown-role-catalogue.md)
 **Effort:** L (approximately 4–8 focused hours, 75% confidence)  
 **Approved by:** User  
 **Date:** 2026-08-12
+
+## Supersession
+
+The JSON `roles` configuration contract in this specification is superseded by the Markdown Role Catalogue contract. Global `orchestrator` and `defaults` remain in `herdr-subagents.json`; each role now resides in `herdr-subagents/roles/<name>.md`. The implementation must reject inline JSON roles and direct users to the Markdown migration described in [`markdown-role-catalogue.md`](./markdown-role-catalogue.md).
 
 ## Problem and Decision
 
@@ -27,7 +31,7 @@ A missing config file means empty defaults and no roles. Invalid JSON or config 
 
 This release does not infer roles, select models from cost metadata, provide built-in vendor/model defaults, or add project-local configuration. Configured default and role model fields may provide ordered availability fallbacks; task overrides and inherited Parent models remain single selections. Roles do not define custom per-task prompts, tools, permissions, skills, placement, task templates, or reusable Child runtimes. Pi retains responsibility for thinking-level capability clamping.
 
-## Configuration Contract
+## Superseded JSON Configuration Contract
 
 ```json
 {
