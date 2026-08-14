@@ -10,7 +10,7 @@ const theme = {
   bold: (text: string) => text,
 };
 
-function registeredTool(): any {
+function registeredTool(runner: BatchRunner = {} as BatchRunner): any {
   let tool: any;
   registerSpawnPiTool(
     {
@@ -18,7 +18,7 @@ function registeredTool(): any {
         tool = definition;
       },
     } as ExtensionAPI,
-    {} as BatchRunner,
+    runner,
     () => "parent",
     { ok: true, path: "/config.json", config: { orchestrator: { enabled: false }, defaults: {}, roles: {} } },
   );
@@ -116,9 +116,9 @@ test("renders collapsed and expanded final rows with the approved visibility pol
   const collapsed = render(tool, { phase: "finished", result }, args);
   const expanded = render(tool, { phase: "finished", result }, args, true);
 
-  assert.match(collapsed, /^incomplete · 1 of 3 complete/);
-  assert.match(collapsed, /✓ task-1 \[explore\] complete/);
-  assert.doesNotMatch(collapsed, /session-1|openai\/model|finished|Please choose/);
+  assert.match(collapsed, /^× incomplete · 1 of 3 complete/);
+  assert.match(collapsed, /✓ task-1 \[explore\]/);
+  assert.doesNotMatch(collapsed, /task-1 \[explore\] complete|session-1|openai\/model|finished|Please choose/);
   assert.match(collapsed, /! task-2 \[reviewer\] needs input · tab-2\/pane-3/);
   assert.match(collapsed, /× task-3 incomplete · model unavailable/);
   assert.match(
@@ -128,6 +128,88 @@ test("renders collapsed and expanded final rows with the approved visibility pol
   assert.match(expanded, /Please choose/);
 });
 
+test("renders successful batches with aggregate completion and icon-only child rows", () => {
+  const tool = registeredTool();
+  const result = {
+    requested: 2,
+    results: [child(), child({ taskId: "task-2" as never, requestIndex: 1 })],
+  };
+  const output = render(
+    tool,
+    { phase: "finished", result },
+    {
+      tasks: [
+        { prompt: "one", role: "explore" },
+        { prompt: "two", role: "reviewer" },
+      ],
+    },
+  );
+
+  assert.match(output, /^✓ 2 of 2 tasks complete/);
+  assert.match(output, /✓ task-1 \[explore\]/);
+  assert.match(output, /✓ task-2 \[reviewer\]/);
+  assert.equal(output.match(/complete/g)?.length, 1);
+});
+
+test("returns simplified plain-text summaries for successful and mixed executions", async () => {
+  const results = [
+    {
+      requested: 1,
+      results: [child({ role: "explore", sessionId: "session-1" })],
+    },
+    {
+      requested: 2,
+      results: [
+        child({ role: "explore" }),
+        child({
+          taskId: "task-2" as never,
+          requestIndex: 1,
+          status: "blocked" as const,
+          role: "reviewer",
+          sessionId: "session-2",
+          paneClosed: false,
+          error: { code: "blocked" as const, message: "Please choose" },
+        }),
+      ],
+    },
+  ];
+  const tool = registeredTool({
+    async run() {
+      return results.shift()!;
+    },
+  });
+  const context = {
+    cwd: "/repo",
+    modelRegistry: { getAvailable: () => [] },
+  };
+
+  const successful = await tool.execute(
+    "call-1",
+    { tasks: [{ prompt: "one", role: "explore" }] },
+    new AbortController().signal,
+    undefined,
+    context,
+  );
+  const mixed = await tool.execute(
+    "call-2",
+    {
+      tasks: [
+        { prompt: "one", role: "explore" },
+        { prompt: "two", role: "reviewer" },
+      ],
+    },
+    new AbortController().signal,
+    undefined,
+    context,
+  );
+
+  assert.equal(successful.content[0].text, "spawn_pi: ✓ 1 of 1 task complete\n✓ task-1 [explore] · session session-1");
+  assert.equal(
+    mixed.content[0].text,
+    "spawn_pi: ! needs input · 1 of 2 complete\n✓ task-1 [explore]\n! task-2 [reviewer]: needs input · session session-2 · Please choose",
+  );
+});
+
 test("supports legacy final details and safely falls back to raw content", () => {
   const tool = registeredTool();
   const legacy = {
@@ -135,7 +217,7 @@ test("supports legacy final details and safely falls back to raw content", () =>
     results: [child({ status: "failed", error: { code: "start_failed", message: "broken" } })],
   };
 
-  assert.match(render(tool, legacy, { tasks: [{ prompt: "one" }] }), /^incomplete · 0 of 1 complete/);
+  assert.match(render(tool, legacy, { tasks: [{ prompt: "one" }] }), /^× incomplete · 0 of 1 complete/);
   assert.equal(render(tool, undefined, { tasks: [{ prompt: "one" }] }), "raw text");
   assert.equal(render(tool, legacy, { tasks: [{ prompt: "one" }] }, false, true), "raw text");
   assert.equal(tool.renderCall({}, theme).render(500).join("\n").trimEnd(), "spawn_pi");
