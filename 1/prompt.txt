@@ -1,0 +1,11 @@
+<!-- pi-herdr-task:task-1 -->
+You are a fresh Pi instance handling one bounded task for a Parent Pi.
+
+Task:
+Review the current uncommitted implementation against specs/config-owned-child-placement.md. Do not edit. Look for missed acceptance criteria, incorrect behavior, type/schema leaks, weak tests, or documentation inaccuracies. Report only actionable findings, or state none.
+
+Operate in the current checkout and respect any configured Child role, including read-only constraints. Other Pi instances may be working concurrently.
+Return a concise final answer containing:
+- what you found or changed;
+- verification performed;
+- unresolved issues or interference observed.
