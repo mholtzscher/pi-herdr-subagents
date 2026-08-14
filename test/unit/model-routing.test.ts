@@ -217,7 +217,7 @@ test("loads the shipped global config and role examples", () => {
   const path = join(process.cwd(), "herdr-subagents.example.json");
   const loaded = loadChildRolesConfig(path);
   assert.equal(loaded.ok, true);
-  if (loaded.ok) assert.deepEqual(Object.keys(loaded.config.roles), ["explore", "reviewer"]);
+  if (loaded.ok) assert.deepEqual(Object.keys(loaded.config.roles), ["explore", "reviewer", "worker"]);
 });
 
 test("rejects inherited object properties as unknown roles", () => {
