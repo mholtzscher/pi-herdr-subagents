@@ -1,13 +1,17 @@
 import { createNameId } from "mnemonic-id";
+import { Type } from "typebox";
+import { Check } from "typebox/value";
 
 export const PARENT_LABEL_ENTRY = "pi-herdr-parent-label";
 
 type SessionEntry = { type: string; customType?: string; data?: unknown };
+const ParentLabelSchema = Type.Object({ label: Type.String({ minLength: 1 }) });
 
 export function findParentLabel(entries: readonly SessionEntry[]): string | undefined {
   for (let index = entries.length - 1; index >= 0; index -= 1) {
     const entry = entries[index];
-    if (entry.type !== "custom" || entry.customType !== PARENT_LABEL_ENTRY || !isParentLabel(entry.data)) continue;
+    if (entry.type !== "custom" || entry.customType !== PARENT_LABEL_ENTRY || !Check(ParentLabelSchema, entry.data))
+      continue;
     return entry.data.label;
   }
 }
@@ -22,14 +26,4 @@ export function loadOrCreateParentLabel(
   const label = generate();
   persist(label);
   return label;
-}
-
-function isParentLabel(value: unknown): value is { label: string } {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "label" in value &&
-    typeof value.label === "string" &&
-    value.label.length > 0
-  );
 }

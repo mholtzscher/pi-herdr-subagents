@@ -75,18 +75,15 @@ export class ConcurrentBatchRunner implements BatchRunner {
   ): Promise<ChildResult> {
     const taskId = taskIdFor(requestIndex);
     const resolution = resolveChildRuntime({ task, parent: context, routing });
-    const base = {
+    const base: Omit<ChildResult, "status" | "error"> = {
       taskId,
       requestIndex,
       truncated: false,
       paneClosed: false,
-      ...(task.role === undefined ? {} : { role: task.role }),
-      ...(resolution.ok
-        ? { selection: visibleSelection(resolution.selection) }
-        : resolution.selection
-          ? { selection: resolution.selection }
-          : {}),
     };
+    if (task.role !== undefined) base.role = task.role;
+    if (resolution.ok) base.selection = visibleSelection(resolution.selection);
+    else if (resolution.selection) base.selection = resolution.selection;
     if (!resolution.ok) {
       const result: ChildResult = {
         ...base,
@@ -254,15 +251,15 @@ function visibleSelection(
   return visible;
 }
 
-function fieldsForStartError(error: unknown): Pick<ChildResult, "sessionId" | "sessionPath" | "location"> {
-  if (!(error instanceof StartChildError) || !error.child) return {};
+function fieldsForStartError(cause: unknown): Pick<ChildResult, "sessionId" | "sessionPath" | "location"> {
+  if (!(cause instanceof StartChildError) || !cause.child) return {};
   return {
-    sessionId: error.child.sessionId,
-    sessionPath: error.child.sessionPath,
-    location: error.child.location,
+    sessionId: cause.child.sessionId,
+    sessionPath: cause.child.sessionPath,
+    location: cause.child.location,
   };
 }
 
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+function messageOf(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause);
 }

@@ -1,3 +1,6 @@
+import { Type } from "typebox";
+import { Check } from "typebox/value";
+
 export type TaskId = string & { readonly __brand: "TaskId" };
 export type ChildPlacement = "tab" | "split";
 export type ChildThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
@@ -82,33 +85,43 @@ export interface BatchProgress {
 
 export class RequestValidationError extends Error {}
 
-const THINKING_LEVELS = new Set<ChildThinkingLevel>(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
+const TextSchema = Type.String();
+const ChildPlacementSchema = Type.Union([Type.Literal("tab"), Type.Literal("split")]);
+const ChildThinkingLevelSchema = Type.Union([
+  Type.Literal("off"),
+  Type.Literal("minimal"),
+  Type.Literal("low"),
+  Type.Literal("medium"),
+  Type.Literal("high"),
+  Type.Literal("xhigh"),
+  Type.Literal("max"),
+]);
 
 export function validateSpawnBatchRequest(request: SpawnBatchRequest): void {
   if (!Array.isArray(request.tasks) || request.tasks.length < 1 || request.tasks.length > 8) {
     throw new RequestValidationError("tasks must contain between 1 and 8 tasks");
   }
   request.tasks.forEach((task, index) => {
-    if (!task || typeof task.prompt !== "string" || task.prompt.trim().length === 0) {
+    if (!task || !Check(TextSchema, task.prompt) || task.prompt.trim().length === 0) {
       throw new RequestValidationError(`tasks[${index}].prompt must be non-empty`);
     }
-    if (task.placement !== undefined && task.placement !== "tab" && task.placement !== "split") {
+    if (task.placement !== undefined && !Check(ChildPlacementSchema, task.placement)) {
       throw new RequestValidationError(`tasks[${index}].placement must be tab or split`);
     }
-    if (task.role !== undefined && (typeof task.role !== "string" || task.role.trim().length === 0)) {
+    if (task.role !== undefined && (!Check(TextSchema, task.role) || task.role.trim().length === 0)) {
       throw new RequestValidationError(`tasks[${index}].role must be non-empty`);
     }
     if (task.model !== undefined && !isCanonicalModel(task.model)) {
       throw new RequestValidationError(`tasks[${index}].model must be an exact provider/model-id`);
     }
-    if (task.thinking !== undefined && !THINKING_LEVELS.has(task.thinking)) {
+    if (task.thinking !== undefined && !Check(ChildThinkingLevelSchema, task.thinking)) {
       throw new RequestValidationError(`tasks[${index}].thinking must be a supported thinking level`);
     }
   });
 }
 
-function isCanonicalModel(value: unknown): value is string {
-  if (typeof value !== "string" || value !== value.trim()) return false;
+function isCanonicalModel(value: string): boolean {
+  if (!Check(TextSchema, value) || value !== value.trim()) return false;
   const slash = value.indexOf("/");
   if (slash <= 0 || slash === value.length - 1) return false;
   const provider = value.slice(0, slash);
@@ -117,6 +130,7 @@ function isCanonicalModel(value: unknown): value is string {
 }
 
 export function taskIdFor(index: number): TaskId {
+  // SAFETY: This factory is the sole creator of TaskId values and always uses the task-${number} format.
   return `task-${index + 1}` as TaskId;
 }
 

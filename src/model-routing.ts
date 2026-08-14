@@ -1,7 +1,16 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
-import type { ChildRuntimeSelection, ChildThinkingLevel, ModelReference, ParentContext, SpawnTask } from "./domain.js";
+import { Type } from "typebox";
+import { Check } from "typebox/value";
+import type {
+  ChildRuntimeSelection,
+  ChildThinkingLevel,
+  ModelReference,
+  ParentContext,
+  SelectionSource,
+  SpawnTask,
+} from "./domain.js";
 
 export type ConfiguredModel = string | string[];
 
@@ -20,8 +29,12 @@ export interface ChildRolesConfig {
   roles: Record<string, ChildRole>;
 }
 
+interface OrchestratorConfig {
+  enabled: boolean;
+}
+
 export interface HerdrSubagentsConfig extends ChildRolesConfig {
-  orchestrator: { enabled: boolean };
+  orchestrator: OrchestratorConfig;
 }
 
 export type ChildRolesConfigLoadResult =
@@ -33,21 +46,45 @@ export interface ModelRoutingContext {
   availableModels: readonly ModelReference[];
 }
 
-export type ChildRuntimeResolution =
-  | { ok: true; selection: ChildRuntimeSelection }
-  | {
-      ok: false;
-      code: "role_not_found" | "model_routing_failed";
-      message: string;
-      selection?: Omit<ChildRuntimeSelection, "rolePrompt">;
-    };
+interface ChildRuntimeFailure {
+  ok: false;
+  code: "role_not_found" | "model_routing_failed";
+  message: string;
+  selection?: Omit<ChildRuntimeSelection, "rolePrompt">;
+}
 
-const THINKING_LEVELS = new Set<ChildThinkingLevel>(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
+export type ChildRuntimeResolution = { ok: true; selection: ChildRuntimeSelection } | ChildRuntimeFailure;
+
+interface ConfigObject {
+  readonly [key: string]: ConfigInput;
+}
+
+type ConfigInput = string | number | boolean | null | ConfigInput[] | ConfigObject;
+
+interface Selection<T> {
+  value: T | undefined;
+  source?: SelectionSource;
+}
+
+const ObjectSchema = Type.Object({}, { additionalProperties: true });
+const ArraySchema = Type.Array(Type.Unknown());
+const ThinkingLevelSchema = Type.Union([
+  Type.Literal("off"),
+  Type.Literal("minimal"),
+  Type.Literal("low"),
+  Type.Literal("medium"),
+  Type.Literal("high"),
+  Type.Literal("xhigh"),
+  Type.Literal("max"),
+]);
+const THINKING_LEVELS: readonly ChildThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
+
 export function loadChildRolesConfig(path = join(getAgentDir(), "herdr-subagents.json")): ChildRolesConfigLoadResult {
   if (!existsSync(path))
     return { ok: true, path, config: { orchestrator: { enabled: false }, defaults: {}, roles: {} } };
   try {
-    return { ok: true, path, config: parseConfig(JSON.parse(readFileSync(path, "utf8"))) };
+    const value: ConfigInput = JSON.parse(readFileSync(path, "utf8"));
+    return { ok: true, path, config: parseConfig(value) };
   } catch (error) {
     return { ok: false, path, error: error instanceof Error ? error.message : String(error) };
   }
@@ -78,31 +115,38 @@ export function resolveChildRuntime(input: {
     input.routing.config.defaults.thinking,
     input.parent.thinkingLevel,
   );
-  const selection: ChildRuntimeSelection = {
-    ...(selectedModel ? { model: selectedModel, modelSource: modelChoice.source } : {}),
-    ...(thinkingChoice.value ? { thinkingLevel: thinkingChoice.value, thinkingSource: thinkingChoice.source } : {}),
-    ...(role ? { rolePrompt: role.prompt } : {}),
-  };
+  const selection: ChildRuntimeSelection = {};
+  if (selectedModel) {
+    selection.model = selectedModel;
+    selection.modelSource = modelChoice.source;
+  }
+  if (thinkingChoice.value) {
+    selection.thinkingLevel = thinkingChoice.value;
+    selection.thinkingSource = thinkingChoice.source;
+  }
+  if (role) selection.rolePrompt = role.prompt;
 
   if (modelChoice.value && !selectedModel) {
     const visibleSelection = withoutRolePrompt(selection);
     if (modelChoice.source === "role") {
       const { model: _, modelSource: __, ...redactedSelection } = visibleSelection;
-      return {
+      const failure: ChildRuntimeFailure = {
         ok: false,
         code: "model_routing_failed",
         message: "The model configured for the requested Child role is not available",
-        ...(Object.keys(redactedSelection).length ? { selection: redactedSelection } : {}),
       };
+      if (Object.keys(redactedSelection).length) failure.selection = redactedSelection;
+      return failure;
     }
-    return {
+    const failure: ChildRuntimeFailure = {
       ok: false,
       code: "model_routing_failed",
       message: Array.isArray(modelChoice.value)
         ? "The configured default Child model is not available"
         : `Requested Child model ${modelChoice.value} is not available`,
-      ...(Object.keys(visibleSelection).length ? { selection: visibleSelection } : {}),
     };
+    if (Object.keys(visibleSelection).length) failure.selection = visibleSelection;
+    return failure;
   }
   return { ok: true, selection };
 }
@@ -113,69 +157,68 @@ export function roleGuidance(config: ChildRolesConfig): string | undefined {
   return `Configured Child Roles: ${roles.map(([name, role]) => (role.description ? `${name} (${role.description})` : name)).join("; ")}`;
 }
 
-function parseConfig(value: unknown): HerdrSubagentsConfig {
-  if (!isRecord(value)) throw new Error("config must be an object");
-  rejectUnsupported(value, ["orchestrator", "defaults", "roles"], "config");
-  const orchestrator = value.orchestrator === undefined ? { enabled: false } : parseOrchestrator(value.orchestrator);
-  const defaults = value.defaults === undefined ? {} : parseDefaults(value.defaults, "defaults");
-  if (value.roles !== undefined && !isRecord(value.roles)) throw new Error("roles must be an object");
-  const roles = Object.fromEntries(
-    Object.entries(value.roles ?? {}).map(([name, role]) => {
+function parseConfig(value: ConfigInput): HerdrSubagentsConfig {
+  const config = parseObject(value, "config");
+  rejectUnsupported(config, ["orchestrator", "defaults", "roles"], "config");
+  const orchestrator = config.orchestrator === undefined ? { enabled: false } : parseOrchestrator(config.orchestrator);
+  const defaults = config.defaults === undefined ? {} : parseDefaults(config.defaults, "defaults");
+  const roles = config.roles === undefined ? {} : parseRoles(config.roles);
+  return { orchestrator, defaults, roles };
+}
+
+function parseOrchestrator(value: ConfigInput): OrchestratorConfig {
+  const orchestrator = parseObject(value, "orchestrator");
+  rejectUnsupported(orchestrator, ["enabled"], "orchestrator");
+  if (!Check(Type.Boolean(), orchestrator.enabled)) throw new Error("orchestrator.enabled must be a boolean");
+  return { enabled: orchestrator.enabled };
+}
+
+function parseDefaults(value: ConfigInput, name: string): ChildRuntimeDefaults {
+  const defaults = parseObject(value, name);
+  rejectUnsupported(defaults, ["model", "thinking"], name);
+  const result: ChildRuntimeDefaults = {};
+  if (defaults.model !== undefined) result.model = validateModel(defaults.model, `${name}.model`);
+  if (defaults.thinking !== undefined) result.thinking = validateThinking(defaults.thinking, `${name}.thinking`);
+  return result;
+}
+
+function parseRoles(value: ConfigInput): Record<string, ChildRole> {
+  const roles = parseObject(value, "roles");
+  return Object.fromEntries(
+    Object.entries(roles).map(([name, role]) => {
       if (!nonWhitespace(name)) throw new Error("role names must be non-whitespace strings");
       return [name, parseRole(role, `roles.${JSON.stringify(name)}`)];
     }),
   );
-  return { orchestrator, defaults, roles };
 }
 
-function parseOrchestrator(value: unknown): { enabled: boolean } {
-  if (!isRecord(value)) throw new Error("orchestrator must be an object");
-  rejectUnsupported(value, ["enabled"], "orchestrator");
-  if (typeof value.enabled !== "boolean") throw new Error("orchestrator.enabled must be a boolean");
-  return { enabled: value.enabled };
+function parseRole(value: ConfigInput, name: string): ChildRole {
+  const role = parseObject(value, name);
+  rejectUnsupported(role, ["description", "prompt", "model", "thinking"], name);
+  const result: ChildRole = { prompt: parseNonWhitespace(role.prompt, `${name}.prompt`) };
+  if (role.description !== undefined) result.description = parseNonWhitespace(role.description, `${name}.description`);
+  if (role.model !== undefined) result.model = validateModel(role.model, `${name}.model`);
+  if (role.thinking !== undefined) result.thinking = validateThinking(role.thinking, `${name}.thinking`);
+  return result;
 }
 
-function parseDefaults(value: unknown, name: string): ChildRuntimeDefaults {
-  if (!isRecord(value)) throw new Error(`${name} must be an object`);
-  rejectUnsupported(value, ["model", "thinking"], name);
-  return {
-    ...(value.model === undefined ? {} : { model: validateModel(value.model, `${name}.model`) }),
-    ...(value.thinking === undefined ? {} : { thinking: validateThinking(value.thinking, `${name}.thinking`) }),
-  };
-}
-
-function parseRole(value: unknown, name: string): ChildRole {
-  if (!isRecord(value)) throw new Error(`${name} must be an object`);
-  rejectUnsupported(value, ["description", "prompt", "model", "thinking"], name);
-  if (!nonWhitespace(value.prompt)) throw new Error(`${name}.prompt must be a non-whitespace string`);
-  if (value.description !== undefined && !nonWhitespace(value.description))
-    throw new Error(`${name}.description must be a non-whitespace string`);
-  return {
-    prompt: value.prompt,
-    ...(value.description === undefined ? {} : { description: value.description }),
-    ...(value.model === undefined ? {} : { model: validateModel(value.model, `${name}.model`) }),
-    ...(value.thinking === undefined ? {} : { thinking: validateThinking(value.thinking, `${name}.thinking`) }),
-  };
-}
-
-function validateModel(value: unknown, name: string): ConfiguredModel {
-  if (Array.isArray(value)) {
+function validateModel(value: ConfigInput, name: string): ConfiguredModel {
+  if (Check(ArraySchema, value)) {
     if (!value.length) throw new Error(`${name} must be a non-empty array of exact provider/model-id strings`);
     return value.map((candidate, index) => validateModelReference(candidate, `${name}[${index}]`));
   }
   return validateModelReference(value, name);
 }
 
-function validateModelReference(value: unknown, name: string): string {
+function validateModelReference(value: ConfigInput, name: string): string {
   if (!nonWhitespace(value) || value !== value.trim() || !parseModel(value))
     throw new Error(`${name} must be an exact provider/model-id`);
   return value;
 }
 
-function validateThinking(value: unknown, name: string): ChildThinkingLevel {
-  if (typeof value !== "string" || !THINKING_LEVELS.has(value as ChildThinkingLevel))
-    throw new Error(`${name} must be one of ${Array.from(THINKING_LEVELS).join(", ")}`);
-  return value as ChildThinkingLevel;
+function validateThinking(value: ConfigInput, name: string): ChildThinkingLevel {
+  if (!Check(ThinkingLevelSchema, value)) throw new Error(`${name} must be one of ${THINKING_LEVELS.join(", ")}`);
+  return value;
 }
 
 function parseModel(value: string): ModelReference | undefined {
@@ -189,7 +232,7 @@ function parseModel(value: string): ModelReference | undefined {
 }
 
 function selectAvailableModel(
-  choice: { value: ConfiguredModel | undefined; source?: "explicit" | "role" | "default" | "parent" },
+  choice: Selection<ConfiguredModel>,
   availableModels: readonly ModelReference[],
 ): ModelReference | undefined {
   if (choice.value === undefined) return undefined;
@@ -209,7 +252,7 @@ function select<T>(
   role: T | undefined,
   defaults: T | undefined,
   parent: T | undefined,
-): { value: T | undefined; source?: "explicit" | "role" | "default" | "parent" } {
+): Selection<T> {
   if (explicit !== undefined) return { value: explicit, source: "explicit" };
   if (role !== undefined) return { value: role, source: "role" };
   if (defaults !== undefined) return { value: defaults, source: "default" };
@@ -221,17 +264,24 @@ function withoutRolePrompt(selection: ChildRuntimeSelection): Omit<ChildRuntimeS
   return visible;
 }
 
-function rejectUnsupported(value: Record<string, unknown>, supported: string[], name: string): void {
+function parseObject(value: ConfigInput, name: string): ConfigObject {
+  if (!Check(ObjectSchema, value)) throw new Error(`${name} must be an object`);
+  // SAFETY: TypeBox verified that the JSON value is an object, and ConfigInput's only object member is ConfigObject.
+  return value as ConfigObject;
+}
+
+function rejectUnsupported(value: ConfigObject, supported: string[], name: string): void {
   for (const key of Object.keys(value))
     if (!supported.includes(key)) throw new Error(`${name}.${key} is not supported`);
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function nonWhitespace(value: ConfigInput): value is string {
+  return Check(Type.String(), value) && value.trim().length > 0;
 }
 
-function nonWhitespace(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
+function parseNonWhitespace(value: ConfigInput | undefined, name: string): string {
+  if (value === undefined || !nonWhitespace(value)) throw new Error(`${name} must be a non-whitespace string`);
+  return value;
 }
 
 export function emptyChildRolesConfig(): ChildRolesConfig {
