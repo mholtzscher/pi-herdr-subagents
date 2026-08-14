@@ -55,7 +55,7 @@ paths and line ranges. Do not modify files.
 
 ### Discovery and naming
 
-- Load regular, direct children whose names end exactly in `.md`. Ignore subdirectories, symlinks, and other entries; do not recurse.
+- Load direct regular files and symlinks whose names end exactly in `.md`. Ignore subdirectories and other entries; do not recurse. Symlink targets must be readable role documents; dangling or invalid links fail the complete configuration.
 - Derive the case-sensitive application role name by removing the final `.md`. It must satisfy the existing non-whitespace role-name rule. Filesystem case-collision rules still apply.
 - Sort entries by filename before parsing for deterministic validation and errors.
 - A missing role catalogue is empty. A missing global config supplies the existing empty global defaults but does not prevent an existing catalogue from loading.
@@ -194,7 +194,7 @@ No automated migration command is included.
 - [ ] A role document produces a filename-derived `ChildRole` whose trimmed body becomes `ChildRole.prompt` and, when selected, the internal `rolePrompt`; body-only documents are valid.
 - [ ] Frontmatter metadata normalizes and routes exactly like the former JSON role fields, including scalar and ordered-array models.
 - [ ] Missing global config and catalogue sources normalize independently, including loading roles without a JSON file.
-- [ ] Discovery is direct, regular-file-only, non-recursive, sorted, and restricted to exact `.md` suffixes.
+- [ ] Discovery accepts direct regular files and symlinks, remains non-recursive and sorted, and is restricted to exact `.md` suffixes.
 - [ ] Empty prompts; malformed, unterminated, duplicate-key, non-object, or unsupported frontmatter; invalid metadata or role names; and unreadable sources fail the complete load and identify the responsible source path.
 - [ ] A JSON `roles` property reports the Markdown migration path, with no inline-role fallback.
 - [ ] Guidance exposes only names and descriptions. Prompt contents and unselected role model candidates remain redacted; selected model/thinking values and their sources remain visible in results and expanded rendering.
@@ -203,7 +203,7 @@ No automated migration command is included.
 - [ ] Long shipped prompts are ordinary multiline Markdown, and editing one role requires changing only its role document unless global defaults change.
 - [ ] `pnpm check` and `pnpm test` pass.
 
-Use temporary directory trees in `test/unit/model-routing.test.ts` to cover path derivation, discovery filtering and order, missing sources, body-only and frontmatter documents, prompt whitespace, YAML and metadata failures, migration errors, and source paths. Retain the pure routing/redaction tests against normalized in-memory roles and existing integration coverage for batch and host behavior. Add production-loader coverage for shipped examples.
+Use temporary directory trees in `test/unit/model-routing.test.ts` to cover path derivation, discovery filtering and order, regular files and symlinks, missing sources, body-only and frontmatter documents, prompt whitespace, YAML and metadata failures, migration errors, and source paths. Retain the pure routing/redaction tests against normalized in-memory roles and existing integration coverage for batch and host behavior. Add production-loader coverage for shipped examples.
 
 ## Risks and Mitigations
 
@@ -212,7 +212,7 @@ Use temporary directory trees in `test/unit/model-routing.test.ts` to cover path
 | Existing inline role configurations break                             | Emit an actionable migration error and document the one-file-per-role conversion while preserving metadata semantics           |
 | YAML permits surprising or expensive constructs                       | Use YAML 1.2 without custom tags, honor parser duplicate/alias protections, and apply strict type and unknown-field validation |
 | One invalid document disables all roles and orchestrator mode         | Preserve fail-closed behavior and report the exact failing source                                                              |
-| Discovery expands beyond intended local files                         | Use the fixed, non-recursive directory and regular `.md` files only; ignore symlinks and provide no includes                   |
+| Discovery expands beyond intended local files                         | Use the fixed, non-recursive directory and direct `.md` files or symlinks only; provide no includes                            |
 | Migration changes prompt formatting                                   | Trim only document edges, preserve internal content, and test multiline paragraphs and lists                                   |
 | Direct runtime dependency is omitted because it is already transitive | Declare `yaml` in `dependencies` and verify the lockfile and clean checks                                                      |
 

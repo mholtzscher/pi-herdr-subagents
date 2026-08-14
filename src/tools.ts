@@ -12,7 +12,12 @@ const SpawnTaskSchema = Type.Object({
   placement: Type.Optional(
     StringEnum(["tab", "split"] as const, { description: "Visible child placement; defaults to tab" }),
   ),
-  role: Type.Optional(Type.String({ minLength: 1, description: "Configured Child Role name" })),
+  role: Type.Optional(
+    Type.String({
+      minLength: 1,
+      description: "Exact configured Child Role name; omit when no matching role is listed",
+    }),
+  ),
   model: Type.Optional(Type.String({ minLength: 1, description: "Exact provider/model override" })),
   thinking: Type.Optional(StringEnum(["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const)),
 });
@@ -44,6 +49,7 @@ export function registerSpawnPiTool(
     promptSnippet: "Offload independent repository exploration or bounded work to fresh visible Pi sessions",
     promptGuidelines: [
       "Use spawn_pi only for 1–8 independent tasks; children share the checkout and may interfere with concurrent edits.",
+      "Set task.role only to an exact name listed under Configured Child Roles; otherwise omit role.",
       ...(configResult.ok && roleGuidance(configResult.config) ? [roleGuidance(configResult.config)!] : []),
     ],
     parameters: SpawnPiSchema,
