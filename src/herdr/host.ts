@@ -93,6 +93,7 @@ const REQUIRED_METHODS = [
   "tab.rename",
   "pane.split",
   "pane.rename",
+  "pane.process_info",
   "agent.start",
   "agent.prompt",
   "agent.get",
@@ -100,7 +101,24 @@ const REQUIRED_METHODS = [
 ];
 const SHELL_READY_RETRY_CODES = new Set(["agent_pane_not_found", "agent_pane_unavailable", "agent_pane_busy"]);
 const SHELL_READY_ATTEMPTS = 240;
+const SHELL_STABLE_POLLS = 3;
 
+const PaneProcessInfoSchema = Type.Object(
+  {
+    process_info: Type.Optional(
+      Type.Object(
+        {
+          shell_pid: Type.Optional(Type.Union([Type.Number(), Type.Null()])),
+          foreground_processes: Type.Optional(
+            Type.Array(Type.Object({ pid: Type.Optional(Type.Number()) }, { additionalProperties: true })),
+          ),
+        },
+        { additionalProperties: true },
+      ),
+    ),
+  },
+  { additionalProperties: true },
+);
 const AgentSessionSchema = Type.Object(
   { kind: Type.Optional(Type.String()), value: Type.Optional(Type.String()) },
   { additionalProperties: true },
@@ -157,6 +175,7 @@ const SessionEntrySchema = Type.Object(
   { additionalProperties: true },
 );
 
+type PaneProcessInfo = Static<typeof PaneProcessInfoSchema>;
 type AgentInfoResponse = Static<typeof AgentInfoResponseSchema>;
 type CreatedTab = Static<typeof CreatedTabSchema>;
 type CreatedSplit = Static<typeof CreatedSplitSchema>;
@@ -204,8 +223,9 @@ export class HerdrChildHost implements ChildHost {
       location = await this.createLocation(client, request, signal);
       await client.call("pane.rename", { pane_id: location.paneId, label: childLabel(request) }, signal);
       rolePromptFile = request.rolePrompt ? await writeRolePrompt(request.rolePrompt) : undefined;
-      await this.startWhenShellAvailable(
+      await this.startWhenShellStable(
         client,
+        location.paneId,
         {
           name: agentName,
           kind: "pi",
@@ -331,25 +351,46 @@ export class HerdrChildHost implements ChildHost {
     return parseAgentInfo(await client.call("agent.get", { target }, signal));
   }
 
-  private async startWhenShellAvailable(
+  private async startWhenShellStable(
     client: HerdrSocketClient,
+    paneId: string,
     params: HerdrRequestParameters,
     signal?: AbortSignal,
   ): Promise<void> {
+    let stablePolls = 0;
     for (let attempt = 0; attempt < SHELL_READY_ATTEMPTS; attempt += 1) {
+      let processInfo: PaneProcessInfo["process_info"];
       try {
-        await client.call("agent.start", params, signal);
-        return;
+        ({ process_info: processInfo } = parsePaneProcessInfo(
+          await client.call("pane.process_info", { pane_id: paneId }, signal),
+        ));
       } catch (error) {
-        if (
-          !(error instanceof HerdrProtocolError) ||
-          !SHELL_READY_RETRY_CODES.has(error.code) ||
-          attempt === SHELL_READY_ATTEMPTS - 1
-        )
-          throw error;
-        await delay(250, signal);
+        if (!(error instanceof HerdrProtocolError) || error.code !== "pane_not_found") throw error;
       }
+      const foreground = processInfo?.foreground_processes;
+      const shellIsStable =
+        processInfo?.shell_pid !== null &&
+        processInfo?.shell_pid !== undefined &&
+        foreground?.length === 1 &&
+        foreground[0]?.pid === processInfo.shell_pid;
+      stablePolls = shellIsStable ? stablePolls + 1 : 0;
+      if (stablePolls >= SHELL_STABLE_POLLS) {
+        try {
+          await client.call("agent.start", params, signal);
+          return;
+        } catch (error) {
+          if (
+            !(error instanceof HerdrProtocolError) ||
+            !SHELL_READY_RETRY_CODES.has(error.code) ||
+            attempt === SHELL_READY_ATTEMPTS - 1
+          )
+            throw error;
+          stablePolls = 0;
+        }
+      }
+      await delay(250, signal);
     }
+    throw new HerdrProtocolError("start_timeout", "Herdr did not report a stable child shell");
   }
 
   private async waitForSession(
@@ -456,6 +497,12 @@ async function latestSessionEntryId(sessionPath: string): Promise<string | undef
     // A newly started Pi can report its session before the file exists; there is no baseline then.
   }
   return undefined;
+}
+
+function parsePaneProcessInfo(payload: HerdrJsonObject): PaneProcessInfo {
+  if (!Check(PaneProcessInfoSchema, payload))
+    throw new HerdrProtocolError("invalid_response", "Herdr did not return pane process information");
+  return payload;
 }
 
 function parseAgentInfo(payload: HerdrJsonObject): AgentInfoResponse {
