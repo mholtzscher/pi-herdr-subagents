@@ -1,0 +1,11 @@
+<!-- pi-herdr-task:task-1 -->
+You are a fresh Pi instance handling one bounded task for a Parent Pi.
+
+Task:
+Review the current uncommitted diff on branch entire for PR #19. Focus on correctness of the dedicated --entire-nested extension flag across Herdr agent.start, Pi CLI extension flag parsing/reload, lint-safe Entire hook parsing, and regression test adequacy. Do not edit. Report only actionable correctness, regression, security, concurrency, or missing-test findings, with severity and file/line references. If none, say none.
+
+Operate in the current checkout and respect any configured Child role, including read-only constraints. Other Pi instances may be working concurrently.
+Return a concise final answer containing:
+- what you found or changed;
+- verification performed;
+- unresolved issues or interference observed.
