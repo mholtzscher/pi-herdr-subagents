@@ -7,35 +7,50 @@
 //
 // ENTIRE_CMD is replaced at install time by Entire's installer.
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { isToolCallEventType, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { execFile } from "node:child_process";
+import { Type } from "typebox";
+import { Check } from "typebox/value";
+
+const InjectedContextSchema = Type.Object(
+  { inject_context: Type.Optional(Type.String()) },
+  { additionalProperties: true },
+);
+
+type SkillEvent = { skill_name: string; invocation: string; timestamp: string };
+type EntireHookData = {
+  type: "session_start" | "before_agent_start" | "agent_end" | "session_shutdown";
+  cwd?: string;
+  session_file?: string;
+  prompt?: string;
+  skill_events?: SkillEvent[];
+};
 
 export default function (pi: ExtensionAPI) {
-  // A Pi subagent is a nested `pi` process (subagent extensions spawn one per task
-  // with cwd inside the project, where Pi auto-discovers this same project-local
-  // extension), so it would otherwise forward its own lifecycle as the user's
-  // session. Mark this process so any Pi it spawns knows it is nested.
-  //
-  // WARNING: Entire's own hook subprocesses inherit this marker from the parent, so
-  // the CLI side must never treat it as a skip signal — it would disable tracking
-  // for everyone. See docs/architecture/agent-guide.md.
-  const nested = Boolean(process.env.ENTIRE_PI_NESTED);
-  process.env.ENTIRE_PI_NESTED = "1";
+  // Herdr-launched subagents receive this dedicated flag because they do not
+  // inherit the Parent Pi's environment. Pi preserves extension flag values
+  // across /reload, so the owning process keeps the same identity after reload.
+  pi.registerFlag("entire-nested", {
+    description: "Disable top-level Entire lifecycle hooks in a nested Pi",
+    type: "boolean",
+    default: false,
+  });
+  const nested = pi.getFlag("entire-nested") === true;
 
   const ENTIRE_CMD = 'entire';
-  let pendingSkillEvents: Array<{ skill_name: string; invocation: string; timestamp: string }> = [];
+  let pendingSkillEvents: SkillEvent[] = [];
 
   // fireHook pipes data to `entire hooks pi <hookName>` and resolves with the
   // hook's stdout (empty string on any failure). Most hooks ignore the return;
   // before_agent_start uses it to apply a model-context injection.
-  function fireHook(hookName: string, data: Record<string, unknown>): Promise<string> {
+  function fireHook(hookName: string, data: EntireHookData): Promise<string> {
     return new Promise((resolve) => {
       try {
         const child = execFile(
           "sh",
           ["-c", `${ENTIRE_CMD} hooks pi ${hookName}`],
           { timeout: 10000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 },
-          (_err, stdout) => resolve(typeof stdout === "string" ? stdout : ""),
+          (_err, stdout) => resolve(stdout),
         );
         child.stdin?.end(JSON.stringify(data));
       } catch {
@@ -53,8 +68,8 @@ export default function (pi: ExtensionAPI) {
       const trimmed = line.trim();
       if (!trimmed.startsWith("{")) continue;
       try {
-        const parsed = JSON.parse(trimmed) as { inject_context?: unknown };
-        if (typeof parsed.inject_context === "string" && parsed.inject_context.length > 0) {
+        const parsed: unknown = JSON.parse(trimmed);
+        if (Check(InjectedContextSchema, parsed) && parsed.inject_context) {
           return parsed.inject_context;
         }
       } catch {
@@ -80,12 +95,10 @@ export default function (pi: ExtensionAPI) {
   // .git/hooks independently of this extension, so a nested subagent that commits
   // needs this hardening at least as much as the parent does.
   pi.on("tool_call", async (event) => {
-    if (event.toolName !== "bash") return;
-    const input = event.input as { command?: string };
-    if (typeof input.command !== "string" || input.command.includes("GIT_TERMINAL_PROMPT=")) {
+    if (!isToolCallEventType("bash", event) || event.input.command.includes("GIT_TERMINAL_PROMPT=")) {
       return;
     }
-    input.command = "export GIT_TERMINAL_PROMPT=0\n" + input.command;
+    event.input.command = "export GIT_TERMINAL_PROMPT=0\n" + event.input.command;
   });
 
   // Everything below forwards session lifecycle to Entire, which only the
