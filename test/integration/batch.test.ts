@@ -26,6 +26,10 @@ function captureHerdrCall(request: { method: string; params: unknown }): Capture
   return request as CapturedHerdrCall;
 }
 
+function readyShell() {
+  return { process_info: { shell_pid: 101, foreground_processes: [{ pid: 101 }] } };
+}
+
 test("rejects spawn outside a Herdr Parent pane without crashing", async () => {
   const original = process.env.HERDR_ENV;
   delete process.env.HERDR_ENV;
@@ -42,6 +46,7 @@ test("labels the Parent tab and every visible child surface with its readable Pa
   const server = await createFakeHerdrServer((request) => {
     calls.push(captureHerdrCall(request));
     if (request.method === "tab.create") return { tab: { tab_id: "w21:t2" }, root_pane: { pane_id: "w21:p9" } };
+    if (request.method === "pane.process_info") return readyShell();
     if (request.method === "agent.start") return {};
     return { agent: { terminal_id: "term-1", agent_session: { kind: "path", value: "/missing.jsonl" } } };
   });
@@ -81,9 +86,14 @@ test("retries child startup until the pane and its shell are ready", async () =>
     Object.assign(new Error("agent target pane w21:p9 is not an available shell"), { code: "agent_pane_busy" }),
   ];
   let startAttempts = 0;
+  let processPolls = 0;
   const controller = new AbortController();
   const server = await createFakeHerdrServer((request) => {
     if (request.method === "tab.create") return { tab: { tab_id: "w21:t2" }, root_pane: { pane_id: "w21:p9" } };
+    if (request.method === "pane.process_info") {
+      processPolls += 1;
+      return readyShell();
+    }
     if (request.method === "agent.start") {
       const error = readinessErrors[startAttempts];
       startAttempts += 1;
@@ -104,7 +114,40 @@ test("retries child startup until the pane and its shell are ready", async () =>
       controller.signal,
     );
     assert.equal(startAttempts, 4);
+    assert.equal(processPolls, 12);
     assert.equal(getEventListeners(controller.signal, "abort").length, 0);
+  } finally {
+    await server.close();
+  }
+});
+
+test("waits for a stable foreground shell before starting a child", async () => {
+  const foregroundPids = [101, 202, 101, 101, 101];
+  let processAttempts = 0;
+  const server = await createFakeHerdrServer((request) => {
+    if (request.method === "tab.create") return { tab: { tab_id: "w21:t2" }, root_pane: { pane_id: "w21:p9" } };
+    if (request.method === "pane.process_info") {
+      processAttempts += 1;
+      if (processAttempts === 1) throw Object.assign(new Error("pane not found"), { code: "pane_not_found" });
+      const pid = foregroundPids.shift();
+      assert.notEqual(pid, undefined);
+      return { process_info: { shell_pid: 101, foreground_processes: [{ pid }] } };
+    }
+    if (request.method === "agent.start") {
+      assert.equal(foregroundPids.length, 0);
+      return {};
+    }
+    return { agent: { terminal_id: "term-1", agent_session: { kind: "path", value: "/missing.jsonl" } } };
+  });
+  try {
+    await new HerdrChildHost().start({
+      taskId: taskIdFor(0),
+      placement: "tab",
+      sessionId: "child",
+      context: parentContext,
+      parent: { workspaceId: "w21", tabId: "w21:t1", paneId: "w21:p1", socketPath: server.path },
+    });
+    assert.equal(processAttempts, 6);
   } finally {
     await server.close();
   }
@@ -114,6 +157,7 @@ test("polls through a null child session until Herdr reports its path", async ()
   let sessionPolls = 0;
   const server = await createFakeHerdrServer((request) => {
     if (request.method === "tab.create") return { tab: { tab_id: "w21:t2" }, root_pane: { pane_id: "w21:p9" } };
+    if (request.method === "pane.process_info") return readyShell();
     if (request.method === "agent.start") return {};
     if (request.method === "agent.get") {
       sessionPolls += 1;
@@ -150,6 +194,7 @@ test("passes selected role identity through a private temporary file", async () 
     const call = captureHerdrCall(request);
     calls.push(call);
     if (call.method === "tab.create") return { tab: { tab_id: "w21:t2" }, root_pane: { pane_id: "w21:p9" } };
+    if (call.method === "pane.process_info") return readyShell();
     if (call.method === "agent.start") {
       const args = call.params.args;
       assert.ok(args);
@@ -190,6 +235,7 @@ test("removes the temporary role prompt when child startup fails", async () => {
   const server = await createFakeHerdrServer((request) => {
     const call = captureHerdrCall(request);
     if (call.method === "tab.create") return { tab: { tab_id: "w21:t2" }, root_pane: { pane_id: "w21:p9" } };
+    if (call.method === "pane.process_info") return readyShell();
     if (call.method === "agent.start") {
       const args = call.params.args;
       assert.ok(args);
