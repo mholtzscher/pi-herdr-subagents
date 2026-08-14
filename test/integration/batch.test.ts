@@ -351,7 +351,7 @@ test("runs four children concurrently, preserves request order, and closes succe
   };
   const result = await new ConcurrentBatchRunner(host, new Reader()).run(
     {
-      tasks: [{ prompt: "one" }, { prompt: "two", placement: "split" }, { prompt: "three" }, { prompt: "four" }],
+      tasks: [{ prompt: "one" }, { prompt: "two" }, { prompt: "three" }, { prompt: "four" }],
     },
     parentContext,
   );
@@ -364,7 +364,33 @@ test("runs four children concurrently, preserves request order, and closes succe
     ["succeeded", "succeeded", "succeeded", "succeeded"],
   );
   assert.equal(host.closed.length, 4);
+  assert.deepEqual(
+    host.startRequests.map((request) => request.placement),
+    ["tab", "tab", "tab", "tab"],
+  );
   assert.deepEqual(host.parentLabels, ["Pi [w1-p1]"]);
+});
+
+test("uses one configured placement for every child and falls back to tab", async () => {
+  for (const [placement, expected] of [
+    [undefined, "tab"],
+    ["tab", "tab"],
+    ["split", "split"],
+  ] as const) {
+    const host = new FakeChildHost();
+    await new ConcurrentBatchRunner(host, new Reader()).run(
+      { tasks: [{ prompt: "one" }, { prompt: "two" }, { prompt: "three" }] },
+      parentContext,
+      {
+        config: { defaults: placement === undefined ? {} : { placement }, roles: {} },
+        availableModels: [],
+      },
+    );
+    assert.deepEqual(
+      host.startRequests.map((request) => request.placement),
+      [expected, expected, expected],
+    );
+  }
 });
 
 test("emits immutable request-ordered progress snapshots from initial through final settlement", async () => {

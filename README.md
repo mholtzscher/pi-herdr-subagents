@@ -12,7 +12,7 @@ The package loads safely outside Herdr. Calling `spawn_pi` there returns an acti
 
 ## Use
 
-Ask Parent Pi to call `spawn_pi` with independent tasks. Each task defaults to its own no-focus tab; use `placement: "split"` for a sibling split. The live result card shows every task in request order as `working`, `complete`, `needs input`, or `incomplete`; requested roles appear as visible row badges, while runtime details appear only when expanded.
+Ask Parent Pi to call `spawn_pi` with independent tasks. Children use the global placement configured in `~/.pi/agent/herdr-subagents.json`, defaulting to separate no-focus tabs when it is omitted. The live result card shows every task in request order as `working`, `complete`, `needs input`, or `incomplete`; requested roles appear as visible row badges, while runtime details appear only when expanded.
 
 ### Orchestrator mode
 
@@ -29,17 +29,20 @@ cp herdr-subagents.example.json ~/.pi/agent/herdr-subagents.json
 cp -R herdr-subagents.example ~/.pi/agent/herdr-subagents
 ```
 
-The global config contains only Orchestrator and runtime defaults:
+The global config contains only Orchestrator and Child defaults:
 
 ```json
 {
   "orchestrator": { "enabled": false },
   "defaults": {
+    "placement": "tab",
     "model": ["openai-codex/gpt-5.6-luna", "openai-codex/gpt-5.6-sol"],
     "thinking": "medium"
   }
 }
 ```
+
+`defaults.placement` is a global user-interface preference accepting `"tab"` or `"split"`. It applies to every child, cannot be set by a task or role, and falls back to `"tab"` when omitted.
 
 Each role is a Markdown document in `~/.pi/agent/herdr-subagents/roles/`; direct `.md` symlinks, such as those created by Home Manager, are supported. Its filename stem is the case-sensitive role name. Put optional `description`, `model`, and `thinking` metadata in YAML frontmatter; the trimmed document body is the appended identity prompt:
 
@@ -62,7 +65,7 @@ Tasks can set `role`, `model`, and `thinking`. Model and thinking resolve indepe
 
 This replaces the former JSON `roles` property. Move each old `roles.<name>` entry to `herdr-subagents/roles/<name>.md`, put `description`, `model`, and `thinking` in frontmatter, put `prompt` in the body, and remove `roles` from the JSON file. Inline JSON roles are rejected; there is no automated migration command.
 
-Configuration is loaded when the extension loads. Run `/reload` after editing either the JSON config or a role document to apply changes to future fresh sessions; it does not reset the current session's Orchestrator state. Invalid configuration disables Orchestrator mode with a warning and blocks a batch before Herdr is inspected.
+Configuration is loaded when the extension loads. Run `/reload` after editing either the JSON config or a role document; placement changes apply to future batches, while role and runtime changes apply to future fresh sessions. Reloading does not reset the current session's Orchestrator state. Invalid configuration disables Orchestrator mode with a warning and blocks a batch before Herdr is inspected.
 
 Role prompts must not contain secrets. The extension writes the literal Child role instruction heading and prompt to a private temporary file, then passes that file to Pi; prompt contents are not placed in process arguments.
 

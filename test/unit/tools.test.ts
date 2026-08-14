@@ -4,7 +4,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { BatchRunner } from "../../src/batch.js";
 import type { BatchProgress, ChildResult, SpawnBatchResult, SpawnTask } from "../../src/domain.js";
 import { taskIdFor } from "../../src/domain.js";
-import { registerSpawnPiTool } from "../../src/tools.js";
+import { registerSpawnPiTool, SpawnPiSchema } from "../../src/tools.js";
 
 const theme = {
   fg: (_color: string, text: string) => text,
@@ -34,6 +34,10 @@ function registeredTool(runner: BatchRunner = unusedRunner): any {
   );
   return tool;
 }
+
+test("omits placement from the public task schema", () => {
+  assert.equal("placement" in SpawnPiSchema.properties.tasks.items.properties, false);
+});
 
 function child(overrides: Partial<ChildResult> = {}): ChildResult {
   return {

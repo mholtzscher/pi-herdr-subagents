@@ -9,9 +9,6 @@ import { roleGuidance, type ChildRolesConfigLoadResult } from "./model-routing.j
 
 const SpawnTaskSchema = Type.Object({
   prompt: Type.String({ minLength: 1, description: "One independent, bounded task for a fresh Pi" }),
-  placement: Type.Optional(
-    StringEnum(["tab", "split"] as const, { description: "Visible child placement; defaults to tab" }),
-  ),
   role: Type.Optional(
     Type.String({
       minLength: 1,

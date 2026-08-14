@@ -158,6 +158,49 @@ test("rejects invalid role documents and identifies their source", () => {
   }
 });
 
+test("loads and validates global child placement", () => {
+  const directory = mkdtempSync(join(tmpdir(), "child-roles-"));
+  const path = join(directory, "herdr-subagents.json");
+  try {
+    for (const placement of ["tab", "split"] as const) {
+      writeFileSync(path, JSON.stringify({ defaults: { placement } }));
+      const loaded = loadChildRolesConfig(path);
+      assert.equal(loaded.ok, true);
+      if (loaded.ok) assert.equal(loaded.config.defaults.placement, placement);
+    }
+
+    writeFileSync(path, JSON.stringify({ defaults: {} }));
+    const omitted = loadChildRolesConfig(path);
+    assert.equal(omitted.ok, true);
+    if (omitted.ok) assert.equal(omitted.config.defaults.placement, undefined);
+
+    for (const placement of ["pane", true, null]) {
+      writeFileSync(path, JSON.stringify({ defaults: { placement } }));
+      assert.match(errorOf(loadChildRolesConfig(path)), /defaults\.placement must be tab or split/);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("rejects placement in role frontmatter", () => {
+  const directory = mkdtempSync(join(tmpdir(), "child-roles-"));
+  const path = join(directory, "herdr-subagents.json");
+  const documentPath = join(directory, "herdr-subagents", "roles", "explore.md");
+  try {
+    mkdirSync(join(directory, "herdr-subagents", "roles"), { recursive: true });
+    writeFileSync(documentPath, "---\nplacement: split\n---\nExplore.");
+    const loaded = loadChildRolesConfig(path);
+    assert.equal(loaded.ok, false);
+    if (!loaded.ok) {
+      assert.equal(loaded.path, documentPath);
+      assert.match(loaded.error, /frontmatter\.placement is not supported/);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("validates global config and reports the JSON roles migration", () => {
   const directory = mkdtempSync(join(tmpdir(), "child-roles-"));
   const path = join(directory, "herdr-subagents.json");
