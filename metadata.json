@@ -3,7 +3,7 @@
   "checkpoint_id": "01M00S5QCCPXTTQ13MH9TYK0D1",
   "strategy": "manual-commit",
   "branch": "tabs-vs-panes",
-  "checkpoints_count": 1,
+  "checkpoints_count": 2,
   "files_touched": [
     "specs/config-owned-child-placement.md"
   ],
@@ -14,13 +14,20 @@
       "compact_transcript": "/0/transcript.jsonl",
       "content_hash": "/0/content_hash.txt",
       "prompt": "/0/prompt.txt"
+    },
+    {
+      "metadata": "/1/metadata.json",
+      "transcript": "/1/full.jsonl",
+      "compact_transcript": "/1/transcript.jsonl",
+      "content_hash": "/1/content_hash.txt",
+      "prompt": "/1/prompt.txt"
     }
   ],
   "token_usage": {
-    "input_tokens": 53545,
+    "input_tokens": 113168,
     "cache_creation_tokens": 0,
-    "cache_read_tokens": 360960,
-    "output_tokens": 7149,
-    "api_call_count": 14
+    "cache_read_tokens": 788480,
+    "output_tokens": 14027,
+    "api_call_count": 28
   }
 }

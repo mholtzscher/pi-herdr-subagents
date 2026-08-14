@@ -1,0 +1,51 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "01M00S5QCCPXTTQ13MH9TYK0D1",
+  "session_id": "01a0016d-8ea2-72c3-a813-b22ed3c8a0ec",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-14T18:39:57.951661559Z",
+  "branch": "tabs-vs-panes",
+  "checkpoints_count": 1,
+  "save_step_count": 1,
+  "files_touched": [
+    "specs/config-owned-child-placement.md"
+  ],
+  "agent": "Pi",
+  "model": "gpt-5.6-sol",
+  "turn_id": "8b807e6c5063",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 59623,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 427520,
+    "output_tokens": 6878,
+    "api_call_count": 14
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-14T18:39:57.920553125Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 0,
+    "total_lines_changed": 0,
+    "agent_percentage": 0,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 215,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "specs/config-owned-child-placement.md": 215
+      }
+    }
+  ]
+}
