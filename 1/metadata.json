@@ -1,0 +1,45 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "01M00Q03BWPDQ3S960MJFK38EN",
+  "session_id": "01a0014e-ea77-74a0-8bf7-1d1eb55e4b61",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-14T18:01:56.577238211Z",
+  "branch": "orchestrator-status-roles",
+  "checkpoints_count": 2,
+  "save_step_count": 1,
+  "files_touched": [
+    "CONTEXT.md",
+    "README.md",
+    "specs/markdown-role-catalogue.md",
+    "src/model-routing.ts",
+    "src/tools.ts",
+    "test/unit/model-routing.test.ts",
+    "test/unit/tools.test.ts"
+  ],
+  "agent": "Pi",
+  "model": "gpt-5.6-sol",
+  "turn_id": "b2275b308ef5",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 90150,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 1404416,
+    "output_tokens": 8859,
+    "api_call_count": 30
+  },
+  "session_metrics": {
+    "turn_count": 2
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-14T18:01:56.542540003Z",
+    "agent_lines": 29,
+    "agent_removed": 11,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 29,
+    "total_lines_changed": 40,
+    "agent_percentage": 100,
+    "metric_version": 2
+  }
+}
