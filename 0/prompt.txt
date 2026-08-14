@@ -1,0 +1,1 @@
+implement @specs/config-owned-child-placement.md

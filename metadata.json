@@ -1,0 +1,36 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "01M00RJ1HC7TDT6GQBD07F6356",
+  "strategy": "manual-commit",
+  "branch": "tabs-vs-panes",
+  "checkpoints_count": 1,
+  "files_touched": [
+    "CONTEXT.md",
+    "README.md",
+    "herdr-subagents.example.json",
+    "src/batch.ts",
+    "src/domain.ts",
+    "src/model-routing.ts",
+    "src/tools.ts",
+    "test/integration/batch.test.ts",
+    "test/unit/domain.test.ts",
+    "test/unit/model-routing.test.ts",
+    "test/unit/tools.test.ts"
+  ],
+  "sessions": [
+    {
+      "metadata": "/0/metadata.json",
+      "transcript": "/0/full.jsonl",
+      "compact_transcript": "/0/transcript.jsonl",
+      "content_hash": "/0/content_hash.txt",
+      "prompt": "/0/prompt.txt"
+    }
+  ],
+  "token_usage": {
+    "input_tokens": 79437,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 802304,
+    "output_tokens": 6327,
+    "api_call_count": 21
+  }
+}

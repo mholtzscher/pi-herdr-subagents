@@ -1,0 +1,68 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "01M00RJ1HC7TDT6GQBD07F6356",
+  "session_id": "01a0017d-369a-7759-8d5f-62557d3b716b",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-14T18:29:12.862718461Z",
+  "branch": "tabs-vs-panes",
+  "checkpoints_count": 1,
+  "save_step_count": 1,
+  "files_touched": [
+    "CONTEXT.md",
+    "README.md",
+    "herdr-subagents.example.json",
+    "src/batch.ts",
+    "src/domain.ts",
+    "src/model-routing.ts",
+    "src/tools.ts",
+    "test/integration/batch.test.ts",
+    "test/unit/domain.test.ts",
+    "test/unit/model-routing.test.ts",
+    "test/unit/tools.test.ts"
+  ],
+  "agent": "Pi",
+  "model": "gpt-5.6-sol",
+  "turn_id": "9bb361b12aa4",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 79437,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 802304,
+    "output_tokens": 6327,
+    "api_call_count": 21
+  },
+  "session_metrics": {
+    "turn_count": 1
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-14T18:29:12.831552626Z",
+    "agent_lines": 101,
+    "agent_removed": 20,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 0,
+    "total_committed": 101,
+    "total_lines_changed": 121,
+    "agent_percentage": 100,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 173,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "specs/config-owned-child-placement.md": 173
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 274,
+      "agent_lines_removed": 20
+    }
+  ]
+}
