@@ -1,0 +1,5 @@
+i keep getting role not found errors
+
+---
+
+i see roles being configured by my nix config

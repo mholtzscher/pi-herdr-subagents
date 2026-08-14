@@ -1,0 +1,63 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "01M00PH4DW2SQ47TZWJ4JR118Q",
+  "session_id": "01a0014e-ea77-74a0-8bf7-1d1eb55e4b61",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-14T17:53:46.131258541Z",
+  "branch": "orchestrator-status-roles",
+  "checkpoints_count": 2,
+  "save_step_count": 2,
+  "files_touched": [
+    "src/orchestrator.ts",
+    "test/unit/orchestrator.test.ts"
+  ],
+  "agent": "Pi",
+  "model": "gpt-5.6-sol",
+  "turn_id": "b2275b308ef5",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 90150,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 1404416,
+    "output_tokens": 8859,
+    "api_call_count": 30
+  },
+  "session_metrics": {
+    "turn_count": 2
+  },
+  "initial_attribution": {
+    "calculated_at": "2026-08-14T17:53:46.093356999Z",
+    "agent_lines": 0,
+    "agent_removed": 0,
+    "human_added": 0,
+    "human_modified": 0,
+    "human_removed": 5,
+    "total_committed": 0,
+    "total_lines_changed": 5,
+    "agent_percentage": 0,
+    "metric_version": 2
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 45,
+      "user_lines_removed": 5,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0,
+      "user_added_per_file": {
+        "src/orchestrator.ts": 8,
+        "test/unit/orchestrator.test.ts": 37
+      },
+      "user_removed_per_file": {
+        "src/orchestrator.ts": 5
+      }
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 58,
+      "agent_lines_removed": 6
+    }
+  ]
+}
