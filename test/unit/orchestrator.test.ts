@@ -145,6 +145,43 @@ test("uses the configured default, persists it, injects instructions, and toggle
   });
 });
 
+test("status reports configured Child Roles and descriptions", async () => {
+  await withParentEnvironment(async () => {
+    const h = harness({
+      ...enabledConfig,
+      config: {
+        ...enabledConfig.config,
+        roles: {
+          explore: { description: "Read-only reconnaissance.", prompt: "Inspect only." },
+          reviewer: { prompt: "Review changes." },
+        },
+      },
+    });
+    h.emit("session_start", { reason: "new" });
+
+    await h.command.handler("status", h.ctx);
+
+    assert.deepEqual(h.notifications.at(-1), {
+      message: "Orchestrator mode is enabled.\nConfigured Child Roles: explore (Read-only reconnaissance.); reviewer",
+      level: "info",
+    });
+  });
+});
+
+test("status reports when no Child Roles are configured", async () => {
+  await withParentEnvironment(async () => {
+    const h = harness(enabledConfig);
+    h.emit("session_start", { reason: "new" });
+
+    await h.command.handler("status", h.ctx);
+
+    assert.deepEqual(h.notifications.at(-1), {
+      message: "Orchestrator mode is enabled.\nConfigured Child Roles: none",
+      level: "info",
+    });
+  });
+});
+
 test("restores state across branches and forks inherit the source session current state", async () => {
   await withParentEnvironment(() => {
     const directory = mkdtempSync(join(tmpdir(), "orchestrator-fork-"));
