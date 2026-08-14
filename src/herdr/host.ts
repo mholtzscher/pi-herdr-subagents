@@ -437,7 +437,15 @@ async function writeRolePrompt(prompt: string): Promise<{ dir: string; path: str
 }
 
 function piArgs(request: StartChildRequest, rolePromptPath?: string): string[] {
-  const args = ["--session-id", request.sessionId, "--name", childLabel(request), "--exclude-tools", "spawn_pi"];
+  const args = [
+    "--session-id",
+    request.sessionId,
+    "--name",
+    childLabel(request),
+    "--entire-nested",
+    "--exclude-tools",
+    "spawn_pi",
+  ];
   if (request.context.model) args.push("--model", `${request.context.model.provider}/${request.context.model.id}`);
   if (request.context.thinkingLevel) args.push("--thinking", request.context.thinkingLevel);
   if (rolePromptPath) args.push("--append-system-prompt", rolePromptPath);

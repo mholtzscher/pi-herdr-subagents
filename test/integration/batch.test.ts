@@ -73,6 +73,7 @@ test("labels the Parent tab and every visible child surface with its readable Pa
     const args = start?.params.args;
     assert.ok(args);
     assert.ok(args.includes("Pi [amber-finch] task-1"));
+    assert.ok(args.includes("--entire-nested"));
     assert.deepEqual(args.slice(-6), ["--exclude-tools", "spawn_pi", "--model", "openai/test", "--thinking", "low"]);
   } finally {
     await server.close();
