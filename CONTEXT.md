@@ -29,7 +29,7 @@ A filename-named set of appended identity guidance and optional runtime metadata
 One Markdown file in the Role Catalogue. Its filename stem is the case-sensitive Child Role name, optional YAML frontmatter holds `description`, `model`, and `thinking`, and its trimmed body is the role prompt.
 
 **Role Catalogue**
-The fixed `herdr-subagents/roles/` directory beside the global `herdr-subagents.json` config. It is loaded as direct regular `.md` files only.
+The fixed `herdr-subagents/roles/` directory beside the global `herdr-subagents.json` config. It is loaded as direct regular or symlinked `.md` files only.
 
 **Child Result**  
 The concise final answer attributed to a Child Task, with status and resumable Pi session identity.

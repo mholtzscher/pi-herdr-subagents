@@ -67,6 +67,12 @@ function render(
     .trimEnd();
 }
 
+test("guidance prevents requests for unconfigured roles", () => {
+  const tool = registeredTool();
+  assert.match(tool.parameters.properties.tasks.items.properties.role.description, /Exact configured Child Role name/);
+  assert.ok(tool.promptGuidelines.some((guideline: string) => /otherwise omit role/.test(guideline)));
+});
+
 test("renders a stable partial card with every requested task in request order", () => {
   const tool = registeredTool();
   const output = render(

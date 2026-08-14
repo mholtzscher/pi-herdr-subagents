@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -91,7 +91,7 @@ test("loads global config and role catalogue independently", () => {
   }
 });
 
-test("discovers only sorted direct regular exact-.md files", () => {
+test("discovers only sorted direct regular files and symlinks with exact .md names", () => {
   const directory = mkdtempSync(join(tmpdir(), "child-roles-"));
   const path = join(directory, "herdr-subagents.json");
   const rolesPath = join(directory, "herdr-subagents", "roles");
@@ -106,7 +106,13 @@ test("discovers only sorted direct regular exact-.md files", () => {
 
     const loaded = loadChildRolesConfig(path);
     assert.equal(loaded.ok, true);
-    if (loaded.ok) assert.deepEqual(Object.keys(loaded.config.roles), ["a", "z"]);
+    if (loaded.ok) assert.deepEqual(Object.keys(loaded.config.roles), ["a", "link", "z"]);
+
+    symlinkSync(join(rolesPath, "missing.md"), join(rolesPath, "broken.md"));
+    const broken = loadChildRolesConfig(path);
+    assert.equal(broken.ok, false);
+    if (!broken.ok) assert.equal(broken.path, join(rolesPath, "broken.md"));
+    unlinkSync(join(rolesPath, "broken.md"));
 
     writeFileSync(join(rolesPath, "b.md"), "---\nunknown: true\n---\nPrompt");
     writeFileSync(join(rolesPath, "0.md"), "---\nunknown: true\n---\nPrompt");

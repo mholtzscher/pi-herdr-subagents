@@ -198,7 +198,7 @@ function loadRolesDirectory(path: string): Record<string, ChildRole> {
 
   const roles: [string, ChildRole][] = [];
   for (const entry of entries.sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0))) {
-    if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
+    if ((!entry.isFile() && !entry.isSymbolicLink()) || !entry.name.endsWith(".md")) continue;
     const name = entry.name.slice(0, -3);
     const documentPath = join(path, entry.name);
     try {

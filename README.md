@@ -41,7 +41,7 @@ The global config contains only Orchestrator and runtime defaults:
 }
 ```
 
-Each role is a Markdown document in `~/.pi/agent/herdr-subagents/roles/`. Its filename stem is the case-sensitive role name. Put optional `description`, `model`, and `thinking` metadata in YAML frontmatter; the trimmed document body is the appended identity prompt:
+Each role is a Markdown document in `~/.pi/agent/herdr-subagents/roles/`; direct `.md` symlinks, such as those created by Home Manager, are supported. Its filename stem is the case-sensitive role name. Put optional `description`, `model`, and `thinking` metadata in YAML frontmatter; the trimmed document body is the appended identity prompt:
 
 ```md
 ---
