@@ -3,7 +3,7 @@ import test from "node:test";
 import { childPrompt, RequestValidationError, taskIdFor, validateSpawnBatchRequest } from "../../src/domain.js";
 
 test("validates the fixed task limit and prompt", () => {
-  validateSpawnBatchRequest({ tasks: [{ prompt: "inspect" }, { prompt: "test", placement: "split" }] });
+  validateSpawnBatchRequest({ tasks: [{ prompt: "inspect" }, { prompt: "test" }] });
   assert.throws(() => validateSpawnBatchRequest({ tasks: [] }), RequestValidationError);
   assert.throws(() => validateSpawnBatchRequest({ tasks: [{ prompt: "   " }] }), RequestValidationError);
   validateSpawnBatchRequest({ tasks: Array.from({ length: 8 }, () => ({ prompt: "x" })) });

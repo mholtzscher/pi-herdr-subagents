@@ -102,7 +102,7 @@ export class ConcurrentBatchRunner implements BatchRunner {
       child = await this.host.start(
         {
           taskId,
-          placement: task.placement ?? "tab",
+          placement: routing.config.defaults.placement ?? "tab",
           sessionId: randomUUID(),
           context: childContext,
           rolePrompt: resolution.selection.rolePrompt,

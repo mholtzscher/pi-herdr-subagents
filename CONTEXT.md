@@ -20,7 +20,7 @@ A fresh Pi session started in a plugin-created Herdr tab or split for exactly on
 One tool invocation containing one or more independent child tasks.
 
 **Child Task**  
-One bounded prompt assigned to one fresh Child Pi. It may request a configured Child Role plus model and thinking overrides.
+One bounded prompt assigned to one fresh Child Pi. It may request a configured Child Role plus model and thinking overrides. Child placement is a global configuration preference, not part of the task.
 
 **Child Role**
 A filename-named set of appended identity guidance and optional runtime metadata loaded from a Role Document. It does not replace Pi's normal system or project context.

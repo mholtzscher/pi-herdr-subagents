@@ -5,6 +5,7 @@ import { Type } from "typebox";
 import { Check } from "typebox/value";
 import { parseDocument as parseYamlDocument } from "yaml";
 import type {
+  ChildPlacement,
   ChildRuntimeSelection,
   ChildThinkingLevel,
   ModelReference,
@@ -20,13 +21,17 @@ export interface ChildRuntimeDefaults {
   thinking?: ChildThinkingLevel;
 }
 
+export interface ChildDefaults extends ChildRuntimeDefaults {
+  placement?: ChildPlacement;
+}
+
 export interface ChildRole extends ChildRuntimeDefaults {
   description?: string;
   prompt: string;
 }
 
 export interface ChildRolesConfig {
-  defaults: ChildRuntimeDefaults;
+  defaults: ChildDefaults;
   roles: Record<string, ChildRole>;
 }
 
@@ -84,6 +89,7 @@ interface Selection<T> {
 
 const ObjectSchema = Type.Object({}, { additionalProperties: true });
 const ArraySchema = Type.Array(Type.Unknown());
+const PlacementSchema = Type.Union([Type.Literal("tab"), Type.Literal("split")]);
 const ThinkingLevelSchema = Type.Union([
   Type.Literal("off"),
   Type.Literal("minimal"),
@@ -286,13 +292,19 @@ function parseOrchestrator(value: ConfigInput): OrchestratorConfig {
   return { enabled: orchestrator.enabled };
 }
 
-function parseDefaults(value: ConfigInput, name: string): ChildRuntimeDefaults {
+function parseDefaults(value: ConfigInput, name: string): ChildDefaults {
   const defaults = parseObject(value, name);
-  rejectUnsupported(defaults, ["model", "thinking"], name);
-  const result: ChildRuntimeDefaults = {};
+  rejectUnsupported(defaults, ["placement", "model", "thinking"], name);
+  const result: ChildDefaults = {};
+  if (defaults.placement !== undefined) result.placement = validatePlacement(defaults.placement, `${name}.placement`);
   if (defaults.model !== undefined) result.model = validateModel(defaults.model, `${name}.model`);
   if (defaults.thinking !== undefined) result.thinking = validateThinking(defaults.thinking, `${name}.thinking`);
   return result;
+}
+
+function validatePlacement(value: ConfigInput, name: string): ChildPlacement {
+  if (!Check(PlacementSchema, value)) throw new Error(`${name} must be tab or split`);
+  return value;
 }
 
 function validateModel(value: ConfigInput, name: string): ConfiguredModel {

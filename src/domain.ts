@@ -13,7 +13,6 @@ export interface ModelReference {
 
 export interface SpawnTask {
   prompt: string;
-  placement?: ChildPlacement;
   role?: string;
   model?: string;
   thinking?: ChildThinkingLevel;
@@ -86,7 +85,6 @@ export interface BatchProgress {
 export class RequestValidationError extends Error {}
 
 const TextSchema = Type.String();
-const ChildPlacementSchema = Type.Union([Type.Literal("tab"), Type.Literal("split")]);
 const ChildThinkingLevelSchema = Type.Union([
   Type.Literal("off"),
   Type.Literal("minimal"),
@@ -104,9 +102,6 @@ export function validateSpawnBatchRequest(request: SpawnBatchRequest): void {
   request.tasks.forEach((task, index) => {
     if (!task || !Check(TextSchema, task.prompt) || task.prompt.trim().length === 0) {
       throw new RequestValidationError(`tasks[${index}].prompt must be non-empty`);
-    }
-    if (task.placement !== undefined && !Check(ChildPlacementSchema, task.placement)) {
-      throw new RequestValidationError(`tasks[${index}].placement must be tab or split`);
     }
     if (task.role !== undefined && (!Check(TextSchema, task.role) || task.role.trim().length === 0)) {
       throw new RequestValidationError(`tasks[${index}].role must be non-empty`);
