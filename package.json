@@ -1,6 +1,6 @@
 {
   "name": "pi-herdr-subagents",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "description": "Visible, one-shot Pi subagents hosted by Herdr",
   "keywords": [
