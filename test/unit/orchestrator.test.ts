@@ -64,6 +64,7 @@ const harness = (
   const appended: { customType: string; data: OrchestratorStateData }[] = [];
   const notifications: { message: string; level?: string }[] = [];
   const statuses: (string | undefined)[] = [];
+  let activeToolReads = 0;
   let sessionEntries: SessionEntry[] = [];
   const ctx: HarnessContext = {
     hasUI: true,
@@ -85,6 +86,7 @@ const harness = (
       appended.push({ customType, data });
     },
     getActiveTools() {
+      activeToolReads += 1;
       return activeTools;
     },
     on(name: string, handler: Handler) {
@@ -103,6 +105,7 @@ const harness = (
     throw new Error("orchestrator command was not registered");
   }
   return {
+    activeToolReads: () => activeToolReads,
     appended,
     command,
     ctx,
@@ -126,6 +129,14 @@ const enabledConfig: ChildRolesConfigLoadResult = {
   ok: true,
   path: "/config.json",
 };
+
+void test("defers active tool inspection until session start", () => {
+  const h = harness(enabledConfig);
+
+  assert.equal(h.activeToolReads(), 0);
+  h.emit("session_start", { reason: "new" });
+  assert.ok(h.activeToolReads() > 0);
+});
 
 const withParentEnvironment = async (
   run: () => Promise<void> | void

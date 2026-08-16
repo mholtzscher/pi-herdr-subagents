@@ -88,7 +88,7 @@ export const registerOrchestrator = (
   lookupChildStatus: ChildStatusLookup
 ): void => {
   let enabled = false;
-  const spawnPiSupported = pi.getActiveTools().includes("spawn_pi");
+  let spawnPiSupported = false;
 
   const available = () =>
     configResult.ok && hasHerdrParentEnvironment() && spawnPiSupported;
@@ -206,6 +206,7 @@ export const registerOrchestrator = (
   });
 
   pi.on("session_start", (event, ctx) => {
+    spawnPiSupported = pi.getActiveTools().includes("spawn_pi");
     // SAFETY: This extension owns __piHerdrOrchestratorForkState on globalThis and reads it only as an optional boolean.
     const shared = globalThis as OrchestratorGlobal;
     const memoryHandoff =
