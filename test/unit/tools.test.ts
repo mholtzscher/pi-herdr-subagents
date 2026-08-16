@@ -51,7 +51,14 @@ interface CapturedTool {
   ) => Promise<{ content: { text: string }[] }>;
   parameters: {
     properties: {
-      tasks: { items: { properties: { role: { description: string } } } };
+      tasks: {
+        items: {
+          properties: {
+            role: { description: string };
+            thinking: { description: string };
+          };
+        };
+      };
     };
   };
   promptGuidelines: string[];
@@ -156,6 +163,19 @@ void test("guidance prevents requests for unconfigured roles", () => {
   assert.ok(
     tool.promptGuidelines.some((guideline: string) =>
       /otherwise omit role/u.test(guideline)
+    )
+  );
+});
+
+void test("guidance discourages routine thinking overrides", () => {
+  const tool = registeredTool();
+  assert.match(
+    tool.parameters.properties.tasks.items.properties.thinking.description,
+    /omit by default/u
+  );
+  assert.ok(
+    tool.promptGuidelines.some((guideline: string) =>
+      /Omit task\.thinking by default/u.test(guideline)
     )
   );
 });
