@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.4.0](https://github.com/mholtzscher/pi-herdr-subagents/compare/v1.3.0...v1.4.0) (2026-08-16)
+
+
+### Features
+
+* **orchestrator:** add cost snapshot command ([e03a6fa](https://github.com/mholtzscher/pi-herdr-subagents/commit/e03a6fa33b3e242e8ffecf47148751ebaf0d8c65))
+* **orchestrator:** add cost snapshot command ([1026136](https://github.com/mholtzscher/pi-herdr-subagents/commit/102613655d8ae9ebcc34db732ea7989d4b1a333a))
+
+
+### Bug Fixes
+
+* discourage child thinking overrides ([231d76a](https://github.com/mholtzscher/pi-herdr-subagents/commit/231d76af80f6b815ed79f6a50588c4f6d2b6913d))
+* discourage child thinking overrides ([1f770a5](https://github.com/mholtzscher/pi-herdr-subagents/commit/1f770a55fdc4e47d58e5919fc204800d8cd75197))
+
 ## [1.3.0](https://github.com/mholtzscher/pi-herdr-subagents/compare/v1.2.1...v1.3.0) (2026-08-14)
 
 ### Features
