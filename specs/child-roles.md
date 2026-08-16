@@ -1,9 +1,6 @@
 # Child Roles — Implementation Spec
 
-**Status:** Superseded by [`markdown-role-catalogue.md`](./markdown-role-catalogue.md)
-**Effort:** L (approximately 4–8 focused hours, 75% confidence)  
-**Approved by:** User  
-**Date:** 2026-08-12
+**Status:** Superseded by [`markdown-role-catalogue.md`](./markdown-role-catalogue.md)<br /> **Effort:** L (approximately 4–8 focused hours, 75% confidence)<br /> **Approved by:** User<br /> **Date:** 2026-08-12
 
 ## Supersession
 
@@ -70,7 +67,7 @@ This release does not infer roles, select models from cost metadata, provide bui
 
 ```ts
 export type ChildThinkingLevel =
-  | "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+  "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 export type SelectionSource = "explicit" | "role" | "default" | "parent";
 
 export interface ModelReference {
@@ -164,7 +161,7 @@ export type ChildRuntimeResolution =
     };
 
 export function loadChildRolesConfig(
-  path?: string, // default: join(getAgentDir(), "herdr-subagents.json")
+  path?: string // default: join(getAgentDir(), "herdr-subagents.json")
 ): ChildRolesConfigLoadResult;
 
 export function resolveChildRuntime(input: {
@@ -211,7 +208,7 @@ export interface BatchRunner {
     options?: {
       signal?: AbortSignal;
       onProgress?: (progress: BatchProgress) => void;
-    },
+    }
   ): Promise<SpawnBatchResult>;
 }
 ```
@@ -236,7 +233,7 @@ export interface StartChildRequest {
 ## Delivery and Verification
 
 | ID | Deliverable | Depends on | Verification |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | D1 | Add domain types plus strict config loader, guidance, and pure resolver in `src/model-routing.ts`. | — | Unit tests for scalar and ordered config models, validation, precedence, first available candidate selection, slash-containing IDs, unavailable selected layers, and guidance/routing redaction. |
 | D2 | Wire config/catalogue through `src/index.ts`, `src/tools.ts`, and `src/batch.ts`; add per-task failures, result metadata, rendering, and host prompt transport. | D1 | Adapter tests prove invalid config prevents runner/inspection/rename; batch tests mix valid tasks, unknown roles, and unavailable routes; host tests assert model, thinking, and one non-shell prompt argument. |
 | D3 | Update `README.md` and `CONTEXT.md`; preserve current lifecycle coverage. | D1, D2 | Tests cover missing config, compatibility without defaults, scoped-model independence, prompt redaction, `/reload` semantics, and unchanged attribution/abort/cleanup behavior. Run `pnpm check` and `pnpm test`. |

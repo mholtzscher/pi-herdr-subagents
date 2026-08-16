@@ -1,41 +1,58 @@
+import { once } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
-import { createServer, type Server } from "node:net";
+import { createServer } from "node:net";
+import type { Server } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import path from "node:path";
+
 import { Type } from "typebox";
 import { Check } from "typebox/value";
-import { parseHerdrRequest, type HerdrJsonObject, type HerdrRequest } from "../../src/herdr/protocol.js";
 
-const CodedErrorSchema = Type.Object({ code: Type.String() }, { additionalProperties: true });
+import { parseHerdrRequest } from "../../src/herdr/protocol.js";
+import type {
+  HerdrJsonObject,
+  HerdrRequest,
+} from "../../src/herdr/protocol.js";
 
-export async function createFakeHerdrServer(
-  handler: (request: HerdrRequest) => HerdrJsonObject,
-): Promise<{ path: string; close(): Promise<void> }> {
-  const dir = await mkdtemp(join(tmpdir(), "pi-herdr-protocol-"));
-  const path = join(dir, "herdr.sock");
+const CodedErrorSchema = Type.Object(
+  { code: Type.String() },
+  { additionalProperties: true }
+);
+
+export const createFakeHerdrServer = async (
+  handler: (request: HerdrRequest) => HerdrJsonObject
+): Promise<{ path: string; close: () => Promise<void> }> => {
+  const dir = await mkdtemp(path.join(tmpdir(), "pi-herdr-protocol-"));
+  const socketPath = path.join(dir, "herdr.sock");
   const server: Server = createServer((socket) => {
     let data = "";
     socket.on("data", (chunk) => {
-      data += chunk;
+      data += chunk.toString();
       const lineEnd = data.indexOf("\n");
-      if (lineEnd < 0) return;
+      if (lineEnd === -1) {
+        return;
+      }
       const request = parseHerdrRequest(data.slice(0, lineEnd));
       try {
-        socket.end(`${JSON.stringify({ id: request.id, result: handler(request) })}\n`);
-      } catch (cause) {
-        const code = Check(CodedErrorSchema, cause) ? cause.code : "fake_error";
         socket.end(
-          `${JSON.stringify({ id: request.id, error: { code, message: cause instanceof Error ? cause.message : String(cause) } })}\n`,
+          `${JSON.stringify({ id: request.id, result: handler(request) })}\n`
+        );
+      } catch (error) {
+        const code = Check(CodedErrorSchema, error) ? error.code : "fake_error";
+        socket.end(
+          `${JSON.stringify({ error: { code, message: error instanceof Error ? error.message : String(error) }, id: request.id })}\n`
         );
       }
     });
   });
-  await new Promise<void>((resolve) => server.listen(path, resolve));
+  server.listen(socketPath);
+  await once(server, "listening");
   return {
-    path,
     async close() {
-      await new Promise<void>((resolve) => server.close(() => resolve()));
+      server.close();
+      await once(server, "close");
       await rm(dir, { recursive: true });
     },
+    path: socketPath,
   };
-}
+};

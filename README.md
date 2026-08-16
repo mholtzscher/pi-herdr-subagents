@@ -57,8 +57,7 @@ thinking: low
 
 Act as a read-only repository investigator.
 
-Locate the relevant entry points, trace important control flow, and cite file
-paths and line ranges. Do not modify files.
+Locate the relevant entry points, trace important control flow, and cite file paths and line ranges. Do not modify files.
 ```
 
 Tasks can set `role`, `model`, and `thinking`. Model and thinking resolve independently: task override, role, configured default, then Parent setting. Config `defaults.model` and role frontmatter `model` accept either one exact `provider/model-id` string or a non-empty ordered array of them (model IDs may contain `/`). The selected config layer is tried in order against available models; if none is available, the task fails rather than falling through to a lower-precedence layer. Task overrides remain a single string, and inherited Parent models are not availability-validated. A role supplies only an appended identity prompt; it does not replace Pi's system prompt, tools, or project context. The configured role descriptions are visible to Parent Pi, but role prompts and model mappings are not.

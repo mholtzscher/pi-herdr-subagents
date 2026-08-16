@@ -1,54 +1,27 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+
 import type { BatchRunner } from "../../src/batch.js";
-import type { BatchProgress, ChildResult, SpawnBatchResult, SpawnTask } from "../../src/domain.js";
+import type {
+  BatchProgress,
+  ChildResult,
+  SpawnBatchResult,
+  SpawnTask,
+} from "../../src/domain.js";
 import { taskIdFor } from "../../src/domain.js";
 import { registerSpawnPiTool, SpawnPiSchema } from "../../src/tools.js";
 
-const theme = {
-  fg: (_color: string, text: string) => text,
+interface TestTheme {
+  bold: (text: string) => string;
+  fg: (_color: string, text: string) => string;
+}
+
+const theme: TestTheme = {
   bold: (text: string) => text,
+  fg: (_color: string, text: string) => text,
 };
-
-type RegisteredTool = Parameters<ExtensionAPI["registerTool"]>[0];
-
-const unusedRunner: BatchRunner = {
-  async run() {
-    throw new Error("The renderer tests do not run the batch runner");
-  },
-};
-
-function registeredTool(runner: BatchRunner = unusedRunner): any {
-  let tool: any;
-  registerSpawnPiTool(
-    // SAFETY: This test double is used only to capture the tool definition, the sole ExtensionAPI member registerSpawnPiTool accesses.
-    {
-      registerTool(definition: RegisteredTool) {
-        tool = definition;
-      },
-    } as ExtensionAPI,
-    runner,
-    () => "parent",
-    { ok: true, path: "/config.json", config: { orchestrator: { enabled: false }, defaults: {}, roles: {} } },
-  );
-  return tool;
-}
-
-test("omits placement from the public task schema", () => {
-  assert.equal("placement" in SpawnPiSchema.properties.tasks.items.properties, false);
-});
-
-function child(overrides: Partial<ChildResult> = {}): ChildResult {
-  return {
-    taskId: taskIdFor(0),
-    requestIndex: 0,
-    status: "succeeded",
-    truncated: false,
-    paneClosed: true,
-    ...overrides,
-  };
-}
 
 type RenderDetails =
   | { phase: "working"; progress: BatchProgress }
@@ -56,28 +29,138 @@ type RenderDetails =
   | SpawnBatchResult
   | undefined;
 
-function render(
-  tool: any,
+interface Rendered {
+  render: (width: number) => string[];
+}
+
+interface ToolCandidate {
+  execute?: unknown;
+  parameters?: unknown;
+  promptGuidelines?: unknown;
+  renderCall?: unknown;
+  renderResult?: unknown;
+}
+
+interface CapturedTool {
+  execute: (
+    callId: string,
+    params: { tasks: SpawnTask[] },
+    signal: AbortSignal,
+    onUpdate: undefined,
+    context: { cwd: string; modelRegistry: { getAvailable: () => unknown[] } }
+  ) => Promise<{ content: { text: string }[] }>;
+  parameters: {
+    properties: {
+      tasks: { items: { properties: { role: { description: string } } } };
+    };
+  };
+  promptGuidelines: string[];
+  renderCall: (args: { tasks?: SpawnTask[] }, theme: TestTheme) => Rendered;
+  renderResult: (
+    result: {
+      content: { type: string; text?: string }[];
+      details: RenderDetails;
+    },
+    options: { expanded: boolean; isPartial: boolean },
+    theme: TestTheme,
+    context: { args: { tasks: SpawnTask[] } }
+  ) => Rendered;
+}
+
+const isCapturedTool = (value: ToolCandidate): value is CapturedTool =>
+  "execute" in value &&
+  typeof value.execute === "function" &&
+  "parameters" in value &&
+  typeof value.parameters === "object" &&
+  value.parameters !== null &&
+  "promptGuidelines" in value &&
+  Array.isArray(value.promptGuidelines) &&
+  "renderCall" in value &&
+  typeof value.renderCall === "function" &&
+  "renderResult" in value &&
+  typeof value.renderResult === "function";
+
+const unusedRunner: BatchRunner = {
+  run() {
+    throw new Error("The renderer tests do not run the batch runner");
+  },
+};
+
+const registeredTool = (runner: BatchRunner = unusedRunner): CapturedTool => {
+  let tool: CapturedTool | undefined;
+  const captureTool: ExtensionAPI["registerTool"] = (definition) => {
+    if (!isCapturedTool(definition)) {
+      throw new Error("The registered tool has an unexpected shape");
+    }
+    tool = definition;
+  };
+  registerSpawnPiTool(
+    // SAFETY: This test double is used only to capture the tool definition, the sole ExtensionAPI member registerSpawnPiTool accesses.
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- ExtensionAPI is intentionally narrowed by this test double.
+    { registerTool: captureTool } as ExtensionAPI,
+    runner,
+    () => "parent",
+    {
+      config: { defaults: {}, orchestrator: { enabled: false }, roles: {} },
+      ok: true,
+      path: "/config.json",
+    }
+  );
+  if (!tool) {
+    throw new Error("The test double did not capture the tool definition");
+  }
+  return tool;
+};
+
+void test("omits placement from the public task schema", () => {
+  assert.equal(
+    "placement" in SpawnPiSchema.properties.tasks.items.properties,
+    false
+  );
+});
+
+const child = (overrides: Partial<ChildResult> = {}): ChildResult => ({
+  paneClosed: true,
+  requestIndex: 0,
+  status: "succeeded",
+  taskId: taskIdFor(0),
+  truncated: false,
+  ...overrides,
+});
+
+const render = (
+  tool: CapturedTool,
   details: RenderDetails,
   args: { tasks: SpawnTask[] },
   expanded = false,
-  isPartial = false,
-): string {
-  return tool
-    .renderResult({ details, content: [{ type: "text", text: "raw text" }] }, { expanded, isPartial }, theme, { args })
+  isPartial = false
+): string =>
+  tool
+    .renderResult(
+      { content: [{ text: "raw text", type: "text" }], details },
+      { expanded, isPartial },
+      theme,
+      { args }
+    )
     .render(500)
     .join("\n")
-    .replace(/ +\n/g, "\n")
+    .replaceAll(/ +\n/gu, "\n")
     .trimEnd();
-}
 
-test("guidance prevents requests for unconfigured roles", () => {
+void test("guidance prevents requests for unconfigured roles", () => {
   const tool = registeredTool();
-  assert.match(tool.parameters.properties.tasks.items.properties.role.description, /Exact configured Child Role name/);
-  assert.ok(tool.promptGuidelines.some((guideline: string) => /otherwise omit role/.test(guideline)));
+  assert.match(
+    tool.parameters.properties.tasks.items.properties.role.description,
+    /Exact configured Child Role name/u
+  );
+  assert.ok(
+    tool.promptGuidelines.some((guideline: string) =>
+      /otherwise omit role/u.test(guideline)
+    )
+  );
 });
 
-test("renders a stable partial card with every requested task in request order", () => {
+void test("renders a stable partial card with every requested task in request order", () => {
   const tool = registeredTool();
   const output = render(
     tool,
@@ -85,86 +168,100 @@ test("renders a stable partial card with every requested task in request order",
       phase: "working",
       progress: {
         completed: 1,
-        total: 3,
         results: [
           child({
-            requestIndex: 1,
-            taskId: taskIdFor(1),
-            status: "blocked",
+            location: { paneId: "pane-2", tabId: "tab-5", workspaceId: "w" },
             paneClosed: false,
-            location: { workspaceId: "w", tabId: "tab-5", paneId: "pane-2" },
+            requestIndex: 1,
+            status: "blocked",
+            taskId: taskIdFor(1),
           }),
         ],
+        total: 3,
       },
     },
     {
-      tasks: [{ prompt: "one", role: "explore\n\u001b[31m" }, { prompt: "two", role: "reviewer" }, { prompt: "three" }],
+      tasks: [
+        { prompt: "one", role: "explore\n\u001B[31m" },
+        { prompt: "two", role: "reviewer" },
+        { prompt: "three" },
+      ],
     },
     false,
-    true,
+    true
   );
 
-  assert.match(output, /^working · 1 of 3 settled/);
-  assert.match(output, /◌ task-1 \[explore \[31m\] working/);
-  assert.match(output, /! task-2 \[reviewer\] needs input · tab-5\/pane-2/);
-  assert.match(output, /◌ task-3 working/);
+  assert.match(output, /^working · 1 of 3 settled/u);
+  assert.match(output, /◌ task-1 \[explore \[31m\] working/u);
+  assert.match(output, /! task-2 \[reviewer\] needs input · tab-5\/pane-2/u);
+  assert.match(output, /◌ task-3 working/u);
 });
 
-test("renders collapsed and expanded final rows with the approved visibility policy", () => {
+void test("renders collapsed and expanded final rows with the approved visibility policy", () => {
   const tool = registeredTool();
   const result = {
     requested: 3,
     results: [
       child({
-        summary: "finished",
-        truncated: true,
-        sessionId: "session-1",
         selection: {
-          model: { provider: "openai", id: "model" },
+          model: { id: "model", provider: "openai" },
           modelSource: "role",
           thinkingLevel: "low",
           thinkingSource: "default",
         },
+        sessionId: "session-1",
+        summary: "finished",
+        truncated: true,
       }),
       child({
-        taskId: taskIdFor(1),
+        error: { code: "blocked", message: "Please choose" },
+        location: { paneId: "pane-3", tabId: "tab-2", workspaceId: "w" },
+        paneClosed: false,
         requestIndex: 1,
         status: "blocked",
-        paneClosed: false,
-        location: { workspaceId: "w", tabId: "tab-2", paneId: "pane-3" },
-        error: { code: "blocked", message: "Please choose" },
+        taskId: taskIdFor(1),
       }),
       child({
-        taskId: taskIdFor(2),
+        error: {
+          code: "model_routing_failed",
+          message: "No configured model is available",
+        },
         requestIndex: 2,
         status: "failed",
-        error: { code: "model_routing_failed", message: "No configured model is available" },
+        taskId: taskIdFor(2),
       }),
     ],
   };
   const args = {
-    tasks: [{ prompt: "one", role: "explore" }, { prompt: "two", role: "reviewer" }, { prompt: "three" }],
+    tasks: [
+      { prompt: "one", role: "explore" },
+      { prompt: "two", role: "reviewer" },
+      { prompt: "three" },
+    ],
   };
   const collapsed = render(tool, { phase: "finished", result }, args);
   const expanded = render(tool, { phase: "finished", result }, args, true);
 
-  assert.match(collapsed, /^× incomplete · 1 of 3 complete/);
-  assert.match(collapsed, /✓ task-1 \[explore\]/);
-  assert.doesNotMatch(collapsed, /task-1 \[explore\] complete|session-1|openai\/model|finished|Please choose/);
-  assert.match(collapsed, /! task-2 \[reviewer\] needs input · tab-2\/pane-3/);
-  assert.match(collapsed, /× task-3 incomplete · model unavailable/);
+  assert.match(collapsed, /^× incomplete · 1 of 3 complete/u);
+  assert.match(collapsed, /✓ task-1 \[explore\]/u);
+  assert.doesNotMatch(
+    collapsed,
+    /task-1 \[explore\] complete|session-1|openai\/model|finished|Please choose/u
+  );
+  assert.match(collapsed, /! task-2 \[reviewer\] needs input · tab-2\/pane-3/u);
+  assert.match(collapsed, /× task-3 incomplete · model unavailable/u);
   assert.match(
     expanded,
-    /finished\nsummary truncated\nmodel: openai\/model\nthinking: low\nmodel selection: role\nthinking selection: default\nsession: session-1/,
+    /finished\nsummary truncated\nmodel: openai\/model\nthinking: low\nmodel selection: role\nthinking selection: default\nsession: session-1/u
   );
-  assert.match(expanded, /Please choose/);
+  assert.match(expanded, /Please choose/u);
 });
 
-test("renders successful batches with aggregate completion and icon-only child rows", () => {
+void test("renders successful batches with aggregate completion and icon-only child rows", () => {
   const tool = registeredTool();
   const result = {
     requested: 2,
-    results: [child(), child({ taskId: taskIdFor(1), requestIndex: 1 })],
+    results: [child(), child({ requestIndex: 1, taskId: taskIdFor(1) })],
   };
   const output = render(
     tool,
@@ -174,16 +271,16 @@ test("renders successful batches with aggregate completion and icon-only child r
         { prompt: "one", role: "explore" },
         { prompt: "two", role: "reviewer" },
       ],
-    },
+    }
   );
 
-  assert.match(output, /^✓ 2 of 2 tasks complete/);
-  assert.match(output, /✓ task-1 \[explore\]/);
-  assert.match(output, /✓ task-2 \[reviewer\]/);
-  assert.equal(output.match(/complete/g)?.length, 1);
+  assert.match(output, /^✓ 2 of 2 tasks complete/u);
+  assert.match(output, /✓ task-1 \[explore\]/u);
+  assert.match(output, /✓ task-2 \[reviewer\]/u);
+  assert.equal(output.match(/complete/gu)?.length, 1);
 });
 
-test("returns simplified plain-text summaries for successful and mixed executions", async () => {
+void test("returns simplified plain-text summaries for successful and mixed executions", async () => {
   const results = [
     {
       requested: 1,
@@ -194,20 +291,24 @@ test("returns simplified plain-text summaries for successful and mixed execution
       results: [
         child({ role: "explore" }),
         child({
-          taskId: taskIdFor(1),
+          error: { code: "blocked", message: "Please choose" },
+          paneClosed: false,
           requestIndex: 1,
-          status: "blocked",
           role: "reviewer",
           sessionId: "session-2",
-          paneClosed: false,
-          error: { code: "blocked", message: "Please choose" },
+          status: "blocked",
+          taskId: taskIdFor(1),
         }),
       ],
     },
   ];
   const tool = registeredTool({
     async run() {
-      return results.shift()!;
+      const result = results.shift();
+      if (!result) {
+        throw new Error("The test runner ran out of results");
+      }
+      return await Promise.resolve(result);
     },
   });
   const context = {
@@ -220,7 +321,7 @@ test("returns simplified plain-text summaries for successful and mixed execution
     { tasks: [{ prompt: "one", role: "explore" }] },
     new AbortController().signal,
     undefined,
-    context,
+    context
   );
   const mixed = await tool.execute(
     "call-2",
@@ -232,33 +333,53 @@ test("returns simplified plain-text summaries for successful and mixed execution
     },
     new AbortController().signal,
     undefined,
-    context,
+    context
   );
 
-  assert.equal(successful.content[0].text, "spawn_pi: ✓ 1 of 1 task complete\n✓ task-1 [explore] · session session-1");
+  assert.equal(
+    successful.content[0].text,
+    "spawn_pi: ✓ 1 of 1 task complete\n✓ task-1 [explore] · session session-1"
+  );
   assert.equal(
     mixed.content[0].text,
-    "spawn_pi: ! needs input · 1 of 2 complete\n✓ task-1 [explore]\n! task-2 [reviewer]: needs input · session session-2 · Please choose",
+    "spawn_pi: ! needs input · 1 of 2 complete\n✓ task-1 [explore]\n! task-2 [reviewer]: needs input · session session-2 · Please choose"
   );
 });
 
-test("supports legacy final details and safely falls back to raw content", () => {
+void test("supports legacy final details and safely falls back to raw content", () => {
   const tool = registeredTool();
   const legacy = {
     requested: 1,
-    results: [child({ status: "failed", error: { code: "start_failed", message: "broken" } })],
+    results: [
+      child({
+        error: { code: "start_failed", message: "broken" },
+        status: "failed",
+      }),
+    ],
   };
 
-  assert.match(render(tool, legacy, { tasks: [{ prompt: "one" }] }), /^× incomplete · 0 of 1 complete/);
-  assert.equal(render(tool, undefined, { tasks: [{ prompt: "one" }] }), "raw text");
-  assert.equal(render(tool, legacy, { tasks: [{ prompt: "one" }] }, false, true), "raw text");
-  assert.equal(tool.renderCall({}, theme).render(500).join("\n").trimEnd(), "spawn_pi");
+  assert.match(
+    render(tool, legacy, { tasks: [{ prompt: "one" }] }),
+    /^× incomplete · 0 of 1 complete/u
+  );
+  assert.equal(
+    render(tool, undefined, { tasks: [{ prompt: "one" }] }),
+    "raw text"
+  );
+  assert.equal(
+    render(tool, legacy, { tasks: [{ prompt: "one" }] }, false, true),
+    "raw text"
+  );
+  assert.equal(
+    tool.renderCall({}, theme).render(500).join("\n").trimEnd(),
+    "spawn_pi"
+  );
   assert.equal(
     tool
       .renderCall({ tasks: [{ prompt: "one" }] }, theme)
       .render(500)
       .join("\n")
       .trimEnd(),
-    "spawn_pi 1 task",
+    "spawn_pi 1 task"
   );
 });

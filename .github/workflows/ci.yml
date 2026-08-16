@@ -21,11 +21,7 @@ jobs:
       - run: nix profile add nixpkgs#devenv
       - name: Install dependencies
         run: devenv shell -- pnpm install --frozen-lockfile
-      - name: Typecheck
-        run: devenv shell -- pnpm run typecheck
-      - name: Lint
-        run: devenv shell -- pnpm run lint
-      - name: Check formatting
-        run: devenv shell -- pnpm run format:check
+      - name: Check
+        run: devenv shell -- pnpm run check
       - name: Test
         run: devenv shell -- pnpm run test

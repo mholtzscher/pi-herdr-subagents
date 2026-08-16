@@ -1,67 +1,128 @@
 import assert from "node:assert/strict";
-import { getEventListeners } from "node:events";
+import { getEventListeners, once } from "node:events";
 import { readFileSync, statSync } from "node:fs";
 import { access } from "node:fs/promises";
 import test from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
+
+import { Type } from "typebox";
+import { Check } from "typebox/value";
+
 import { ConcurrentBatchRunner } from "../../src/batch.js";
-import { taskIdFor, type BatchProgress } from "../../src/domain.js";
-import { HerdrChildHost, SessionChildRegistry, StartChildError } from "../../src/herdr/host.js";
+import { taskIdFor } from "../../src/domain.js";
+import type { BatchProgress } from "../../src/domain.js";
+import {
+  HerdrChildHost,
+  SessionChildRegistry,
+  StartChildError,
+} from "../../src/herdr/host.js";
+import type { HerdrRequest } from "../../src/herdr/protocol.js";
 import type { ChildResultReader } from "../../src/results.js";
 import { FakeChildHost, parentContext } from "../support/fake-child-host.js";
 import { createFakeHerdrServer } from "../support/fake-herdr-server.js";
 
 class Reader implements ChildResultReader {
-  async read(input: { taskId: string }): Promise<{ summary: string; truncated: boolean }> {
-    return { summary: `answer for ${input.taskId}`, truncated: false };
+  // oxlint-disable-next-line eslint/class-methods-use-this
+  async read(input: {
+    taskId: string;
+  }): Promise<{ summary: string; truncated: boolean }> {
+    return await Promise.resolve({
+      summary: `answer for ${input.taskId}`,
+      truncated: false,
+    });
   }
 }
 
-type CapturedHerdrCall = {
+interface CapturedHerdrCall {
   method: string;
   params: { args?: string[]; label?: string };
+}
+
+const CapturedHerdrParamsSchema = Type.Object(
+  {
+    args: Type.Optional(Type.Array(Type.String())),
+    label: Type.Optional(Type.String()),
+  },
+  { additionalProperties: true }
+);
+
+const captureHerdrCall = (request: HerdrRequest): CapturedHerdrCall => {
+  if (!Check(CapturedHerdrParamsSchema, request.params)) {
+    throw new TypeError("Unexpected Herdr request params");
+  }
+  const params: CapturedHerdrCall["params"] = {};
+  if (request.params.args !== undefined) {
+    params.args = request.params.args;
+  }
+  if (request.params.label !== undefined) {
+    params.label = request.params.label;
+  }
+  return { method: request.method, params };
 };
 
-function captureHerdrCall(request: { method: string; params: unknown }): CapturedHerdrCall {
-  // SAFETY: The fake server invokes this only with requests emitted by the HerdrChildHost under test.
-  return request as CapturedHerdrCall;
-}
+const readyShell = () => ({
+  process_info: { foreground_processes: [{ pid: 101 }], shell_pid: 101 },
+});
 
-function readyShell() {
-  return { process_info: { shell_pid: 101, foreground_processes: [{ pid: 101 }] } };
-}
-
-test("rejects spawn outside a Herdr Parent pane without crashing", async () => {
+void test("rejects spawn outside a Herdr Parent pane without crashing", async () => {
   const original = process.env.HERDR_ENV;
   delete process.env.HERDR_ENV;
   try {
-    await assert.rejects(() => new HerdrChildHost().inspect(), /HERDR_ENV=1/);
+    await assert.rejects(
+      async () => await new HerdrChildHost().inspect(),
+      /HERDR_ENV=1/u
+    );
   } finally {
-    if (original === undefined) delete process.env.HERDR_ENV;
-    else process.env.HERDR_ENV = original;
+    if (original === undefined) {
+      delete process.env.HERDR_ENV;
+    } else {
+      process.env.HERDR_ENV = original;
+    }
   }
 });
 
-test("labels the Parent tab and every visible child surface with its readable Parent identity", async () => {
+void test("labels the Parent tab and every visible child surface with its readable Parent identity", async () => {
   const calls: CapturedHerdrCall[] = [];
   const server = await createFakeHerdrServer((request) => {
     calls.push(captureHerdrCall(request));
-    if (request.method === "tab.create") return { tab: { tab_id: "w21:t2" }, root_pane: { pane_id: "w21:p9" } };
-    if (request.method === "pane.process_info") return readyShell();
-    if (request.method === "agent.start") return {};
-    return { agent: { terminal_id: "term-1", agent_session: { kind: "path", value: "/missing.jsonl" } } };
+    if (request.method === "tab.create") {
+      return { root_pane: { pane_id: "w21:p9" }, tab: { tab_id: "w21:t2" } };
+    }
+    if (request.method === "pane.process_info") {
+      return readyShell();
+    }
+    if (request.method === "agent.start") {
+      return {};
+    }
+    return {
+      agent: {
+        agent_session: { kind: "path", value: "/missing.jsonl" },
+        terminal_id: "term-1",
+      },
+    };
   });
   try {
     const context = { ...parentContext, parentLabel: "Amber Finch" };
     await new HerdrChildHost().start({
-      taskId: taskIdFor(0),
+      context,
+      parent: {
+        paneId: "w21:p1",
+        socketPath: server.path,
+        tabId: "w21:t1",
+        workspaceId: "w21",
+      },
       placement: "tab",
       sessionId: "child",
-      context,
-      parent: { workspaceId: "w21", tabId: "w21:t1", paneId: "w21:p1", socketPath: server.path },
+      taskId: taskIdFor(0),
     });
     await new HerdrChildHost().renameParent(
-      { workspaceId: "w21", tabId: "w21:t1", paneId: "w21:p1", socketPath: server.path },
-      context,
+      {
+        paneId: "w21:p1",
+        socketPath: server.path,
+        tabId: "w21:t1",
+        workspaceId: "w21",
+      },
+      context
     );
     const parentTab = calls.find((call) => call.method === "tab.rename");
     const tab = calls.find((call) => call.method === "tab.create");
@@ -74,23 +135,39 @@ test("labels the Parent tab and every visible child surface with its readable Pa
     assert.ok(args);
     assert.ok(args.includes("Pi [amber-finch] task-1"));
     assert.ok(args.includes("--entire-nested"));
-    assert.deepEqual(args.slice(-6), ["--exclude-tools", "spawn_pi", "--model", "openai/test", "--thinking", "low"]);
+    assert.deepEqual(args.slice(-6), [
+      "--exclude-tools",
+      "spawn_pi",
+      "--model",
+      "openai/test",
+      "--thinking",
+      "low",
+    ]);
   } finally {
     await server.close();
   }
 });
 
-test("retries child startup until the pane and its shell are ready", async () => {
+void test("retries child startup until the pane and its shell are ready", async () => {
   const readinessErrors = [
-    Object.assign(new Error("agent target pane w21:p9 not found"), { code: "agent_pane_not_found" }),
-    Object.assign(new Error("agent target pane w21:p9 has no live terminal"), { code: "agent_pane_unavailable" }),
-    Object.assign(new Error("agent target pane w21:p9 is not an available shell"), { code: "agent_pane_busy" }),
+    Object.assign(new Error("agent target pane w21:p9 not found"), {
+      code: "agent_pane_not_found",
+    }),
+    Object.assign(new Error("agent target pane w21:p9 has no live terminal"), {
+      code: "agent_pane_unavailable",
+    }),
+    Object.assign(
+      new Error("agent target pane w21:p9 is not an available shell"),
+      { code: "agent_pane_busy" }
+    ),
   ];
   let startAttempts = 0;
   let processPolls = 0;
   const controller = new AbortController();
   const server = await createFakeHerdrServer((request) => {
-    if (request.method === "tab.create") return { tab: { tab_id: "w21:t2" }, root_pane: { pane_id: "w21:p9" } };
+    if (request.method === "tab.create") {
+      return { root_pane: { pane_id: "w21:p9" }, tab: { tab_id: "w21:t2" } };
+    }
     if (request.method === "pane.process_info") {
       processPolls += 1;
       return readyShell();
@@ -98,21 +175,33 @@ test("retries child startup until the pane and its shell are ready", async () =>
     if (request.method === "agent.start") {
       const error = readinessErrors[startAttempts];
       startAttempts += 1;
-      if (error) throw error;
+      if (error !== undefined) {
+        throw error;
+      }
       return {};
     }
-    return { agent: { terminal_id: "term-1", agent_session: { kind: "path", value: "/missing.jsonl" } } };
+    return {
+      agent: {
+        agent_session: { kind: "path", value: "/missing.jsonl" },
+        terminal_id: "term-1",
+      },
+    };
   });
   try {
     await new HerdrChildHost().start(
       {
-        taskId: taskIdFor(0),
+        context: parentContext,
+        parent: {
+          paneId: "w21:p1",
+          socketPath: server.path,
+          tabId: "w21:t1",
+          workspaceId: "w21",
+        },
         placement: "tab",
         sessionId: "child",
-        context: parentContext,
-        parent: { workspaceId: "w21", tabId: "w21:t1", paneId: "w21:p1", socketPath: server.path },
+        taskId: taskIdFor(0),
       },
-      controller.signal,
+      controller.signal
     );
     assert.equal(startAttempts, 4);
     assert.equal(processPolls, 12);
@@ -122,31 +211,49 @@ test("retries child startup until the pane and its shell are ready", async () =>
   }
 });
 
-test("waits for a stable foreground shell before starting a child", async () => {
+void test("waits for a stable foreground shell before starting a child", async () => {
   const foregroundPids = [101, 202, 101, 101, 101];
   let processAttempts = 0;
   const server = await createFakeHerdrServer((request) => {
-    if (request.method === "tab.create") return { tab: { tab_id: "w21:t2" }, root_pane: { pane_id: "w21:p9" } };
+    if (request.method === "tab.create") {
+      return { root_pane: { pane_id: "w21:p9" }, tab: { tab_id: "w21:t2" } };
+    }
     if (request.method === "pane.process_info") {
       processAttempts += 1;
-      if (processAttempts === 1) throw Object.assign(new Error("pane not found"), { code: "pane_not_found" });
+      if (processAttempts === 1) {
+        throw Object.assign(new Error("pane not found"), {
+          code: "pane_not_found",
+        });
+      }
       const pid = foregroundPids.shift();
       assert.notEqual(pid, undefined);
-      return { process_info: { shell_pid: 101, foreground_processes: [{ pid }] } };
+      return {
+        process_info: { foreground_processes: [{ pid }], shell_pid: 101 },
+      };
     }
     if (request.method === "agent.start") {
       assert.equal(foregroundPids.length, 0);
       return {};
     }
-    return { agent: { terminal_id: "term-1", agent_session: { kind: "path", value: "/missing.jsonl" } } };
+    return {
+      agent: {
+        agent_session: { kind: "path", value: "/missing.jsonl" },
+        terminal_id: "term-1",
+      },
+    };
   });
   try {
     await new HerdrChildHost().start({
-      taskId: taskIdFor(0),
+      context: parentContext,
+      parent: {
+        paneId: "w21:p1",
+        socketPath: server.path,
+        tabId: "w21:t1",
+        workspaceId: "w21",
+      },
       placement: "tab",
       sessionId: "child",
-      context: parentContext,
-      parent: { workspaceId: "w21", tabId: "w21:t1", paneId: "w21:p1", socketPath: server.path },
+      taskId: taskIdFor(0),
     });
     assert.equal(processAttempts, 6);
   } finally {
@@ -154,18 +261,27 @@ test("waits for a stable foreground shell before starting a child", async () => 
   }
 });
 
-test("polls through a null child session until Herdr reports its path", async () => {
+void test("polls through a null child session until Herdr reports its path", async () => {
   let sessionPolls = 0;
   const server = await createFakeHerdrServer((request) => {
-    if (request.method === "tab.create") return { tab: { tab_id: "w21:t2" }, root_pane: { pane_id: "w21:p9" } };
-    if (request.method === "pane.process_info") return readyShell();
-    if (request.method === "agent.start") return {};
+    if (request.method === "tab.create") {
+      return { root_pane: { pane_id: "w21:p9" }, tab: { tab_id: "w21:t2" } };
+    }
+    if (request.method === "pane.process_info") {
+      return readyShell();
+    }
+    if (request.method === "agent.start") {
+      return {};
+    }
     if (request.method === "agent.get") {
       sessionPolls += 1;
       return {
         agent: {
+          agent_session:
+            sessionPolls === 1
+              ? null
+              : { kind: "path", value: "/missing.jsonl" },
           terminal_id: "term-1",
-          agent_session: sessionPolls === 1 ? null : { kind: "path", value: "/missing.jsonl" },
         },
       };
     }
@@ -173,11 +289,16 @@ test("polls through a null child session until Herdr reports its path", async ()
   });
   try {
     const child = await new HerdrChildHost().start({
-      taskId: taskIdFor(0),
+      context: parentContext,
+      parent: {
+        paneId: "w21:p1",
+        socketPath: server.path,
+        tabId: "w21:t1",
+        workspaceId: "w21",
+      },
       placement: "tab",
       sessionId: "child",
-      context: parentContext,
-      parent: { workspaceId: "w21", tabId: "w21:t1", paneId: "w21:p1", socketPath: server.path },
+      taskId: taskIdFor(0),
     });
     assert.equal(sessionPolls, 2);
     assert.equal(child.sessionPath, "/missing.jsonl");
@@ -186,7 +307,7 @@ test("polls through a null child session until Herdr reports its path", async ()
   }
 });
 
-test("passes selected role identity through a private temporary file", async () => {
+void test("passes selected role identity through a private temporary file", async () => {
   const calls: CapturedHerdrCall[] = [];
   let promptPath = "";
   let promptContents = "";
@@ -194,51 +315,70 @@ test("passes selected role identity through a private temporary file", async () 
   const server = await createFakeHerdrServer((request) => {
     const call = captureHerdrCall(request);
     calls.push(call);
-    if (call.method === "tab.create") return { tab: { tab_id: "w21:t2" }, root_pane: { pane_id: "w21:p9" } };
-    if (call.method === "pane.process_info") return readyShell();
+    if (call.method === "tab.create") {
+      return { root_pane: { pane_id: "w21:p9" }, tab: { tab_id: "w21:t2" } };
+    }
+    if (call.method === "pane.process_info") {
+      return readyShell();
+    }
     if (call.method === "agent.start") {
-      const args = call.params.args;
+      const { args } = call.params;
       assert.ok(args);
       promptPath = args.at(-1) ?? "";
-      promptContents = readFileSync(promptPath, "utf8");
+      promptContents = readFileSync(promptPath, "utf-8");
       promptMode = statSync(promptPath).mode;
       return {};
     }
-    return { agent: { terminal_id: "term-1", agent_session: { kind: "path", value: "/missing.jsonl" } } };
+    return {
+      agent: {
+        agent_session: { kind: "path", value: "/missing.jsonl" },
+        terminal_id: "term-1",
+      },
+    };
   });
   try {
     const prompt = "Read only.\n\nPreserve 'quotes' and $variables.";
     const pending = new HerdrChildHost().start({
-      taskId: taskIdFor(0),
-      placement: "tab",
-      sessionId: "child",
       context: parentContext,
+      parent: {
+        paneId: "w21:p1",
+        socketPath: server.path,
+        tabId: "w21:t1",
+        workspaceId: "w21",
+      },
+      placement: "tab",
       rolePrompt: prompt,
-      parent: { workspaceId: "w21", tabId: "w21:t1", paneId: "w21:p1", socketPath: server.path },
+      sessionId: "child",
+      taskId: taskIdFor(0),
     });
     await pending;
-    const args = calls.find((call) => call.method === "agent.start")?.params.args;
+    const args = calls.find((call) => call.method === "agent.start")?.params
+      .args;
     assert.ok(args);
     promptPath = args.at(-1) ?? "";
     assert.equal(args.at(-2), "--append-system-prompt");
-    assert.doesNotMatch(promptPath, /[\r\n]/);
+    assert.doesNotMatch(promptPath, /[\r\n]/u);
     await assert.rejects(access(promptPath));
 
     assert.equal(promptContents, `Child role instructions:\n${prompt}`);
-    assert.equal(promptMode & 0o777, 0o600);
+    assert.equal(promptMode % 0o1000, 0o600);
   } finally {
     await server.close();
   }
 });
 
-test("removes the temporary role prompt when child startup fails", async () => {
+void test("removes the temporary role prompt when child startup fails", async () => {
   let promptPath = "";
   const server = await createFakeHerdrServer((request) => {
     const call = captureHerdrCall(request);
-    if (call.method === "tab.create") return { tab: { tab_id: "w21:t2" }, root_pane: { pane_id: "w21:p9" } };
-    if (call.method === "pane.process_info") return readyShell();
+    if (call.method === "tab.create") {
+      return { root_pane: { pane_id: "w21:p9" }, tab: { tab_id: "w21:t2" } };
+    }
+    if (call.method === "pane.process_info") {
+      return readyShell();
+    }
     if (call.method === "agent.start") {
-      const args = call.params.args;
+      const { args } = call.params;
       assert.ok(args);
       promptPath = args.at(-1) ?? "";
       throw new Error("start rejected");
@@ -247,16 +387,21 @@ test("removes the temporary role prompt when child startup fails", async () => {
   });
   try {
     await assert.rejects(
-      () =>
-        new HerdrChildHost().start({
-          taskId: taskIdFor(0),
-          placement: "tab",
-          sessionId: "child",
+      async () =>
+        await new HerdrChildHost().start({
           context: parentContext,
+          parent: {
+            paneId: "w21:p1",
+            socketPath: server.path,
+            tabId: "w21:t1",
+            workspaceId: "w21",
+          },
+          placement: "tab",
           rolePrompt: "Read only.",
-          parent: { workspaceId: "w21", tabId: "w21:t1", paneId: "w21:p1", socketPath: server.path },
+          sessionId: "child",
+          taskId: taskIdFor(0),
         }),
-      /start rejected/,
+      /start rejected/u
     );
     await assert.rejects(access(promptPath));
   } finally {
@@ -264,7 +409,7 @@ test("removes the temporary role prompt when child startup fails", async () => {
   }
 });
 
-test("does not start children when the Parent tab cannot be renamed", async () => {
+void test("does not start children when the Parent tab cannot be renamed", async () => {
   const host = new FakeChildHost();
   host.renameError = new Error("tab rename rejected");
   const snapshots: BatchProgress[] = [];
@@ -273,41 +418,52 @@ test("does not start children when the Parent tab cannot be renamed", async () =
     { tasks: [{ prompt: "one" }, { prompt: "two" }] },
     parentContext,
     undefined,
-    { onProgress: (snapshot) => snapshots.push(snapshot) },
+    {
+      onProgress: (snapshot) => {
+        snapshots.push(snapshot);
+      },
+    }
   );
 
   assert.deepEqual(
     result.results.map((child) => child.status),
-    ["failed", "failed"],
+    ["failed", "failed"]
   );
   assert.deepEqual(
     snapshots.map((snapshot) => snapshot.results.length),
-    [0, 2],
+    [0, 2]
   );
   assert.equal(host.started.length, 0);
   assert.deepEqual(host.parentLabels, []);
 });
 
-test("retains the known child location when startup fails after creation", async () => {
+void test("retains the known child location when startup fails after creation", async () => {
   const host = new FakeChildHost();
-  host.start = async (request) => {
+  host.start = (request) => {
     throw new StartChildError("Pi did not register", {
-      taskId: request.taskId,
-      sessionId: request.sessionId,
-      location: { workspaceId: "w1", tabId: "w1:t2", paneId: "w1:p2" },
       agentName: "pi_task_1",
+      location: { paneId: "w1:p2", tabId: "w1:t2", workspaceId: "w1" },
+      sessionId: request.sessionId,
+      taskId: request.taskId,
       terminalId: "term-1",
     });
   };
 
-  const result = await new ConcurrentBatchRunner(host, new Reader()).run({ tasks: [{ prompt: "one" }] }, parentContext);
+  const result = await new ConcurrentBatchRunner(host, new Reader()).run(
+    { tasks: [{ prompt: "one" }] },
+    parentContext
+  );
 
   assert.equal(result.results[0].status, "failed");
-  assert.deepEqual(result.results[0].location, { workspaceId: "w1", tabId: "w1:t2", paneId: "w1:p2" });
-  assert.ok(result.results[0].sessionId);
+  assert.deepEqual(result.results[0].location, {
+    paneId: "w1:p2",
+    tabId: "w1:t2",
+    workspaceId: "w1",
+  });
+  assert.ok(result.results[0].sessionId !== undefined);
 });
 
-test("does not close a pane whose Herdr occupant changed", async () => {
+void test("does not close a pane whose Herdr occupant changed", async () => {
   const calls: string[] = [];
   const server = await createFakeHerdrServer((request) => {
     calls.push(request.method);
@@ -317,120 +473,140 @@ test("does not close a pane whose Herdr occupant changed", async () => {
   process.env.HERDR_SOCKET_PATH = server.path;
   try {
     const host = new HerdrChildHost();
-    await assert.rejects(() =>
-      host.close({
-        taskId: taskIdFor(0),
-        sessionId: "child",
-        location: { workspaceId: "w1", tabId: "w1:t2", paneId: "w1:p2" },
+    await assert.rejects(async () => {
+      await host.close({
         agentName: "pi_task_1",
+        location: { paneId: "w1:p2", tabId: "w1:t2", workspaceId: "w1" },
+        sessionId: "child",
+        taskId: taskIdFor(0),
         terminalId: "expected",
-      }),
-    );
+      });
+    });
     assert.deepEqual(calls, ["agent.get"]);
   } finally {
-    if (originalSocketPath === undefined) delete process.env.HERDR_SOCKET_PATH;
-    else process.env.HERDR_SOCKET_PATH = originalSocketPath;
+    if (originalSocketPath === undefined) {
+      delete process.env.HERDR_SOCKET_PATH;
+    } else {
+      process.env.HERDR_SOCKET_PATH = originalSocketPath;
+    }
     await server.close();
   }
 });
 
-test("runs four children concurrently, preserves request order, and closes successes", async () => {
+void test("runs four children concurrently, preserves request order, and closes successes", async () => {
   const host = new FakeChildHost();
-  for (let index = 1; index <= 4; index += 1) host.sessionPaths.set(taskIdFor(index - 1), `/tmp/${index}.jsonl`);
+  for (let index = 1; index <= 4; index += 1) {
+    host.sessionPaths.set(taskIdFor(index - 1), `/tmp/${index}.jsonl`);
+  }
   const start = host.start.bind(host);
   const started = new Set<string>();
-  let release!: () => void;
-  const allStarted = new Promise<void>((resolve) => {
-    release = resolve;
-  });
+  const allStarted = new EventTarget();
+  const allStartedSignal = once(allStarted, "ready");
   host.start = async (request) => {
     started.add(request.taskId);
-    if (started.size === 4) release();
-    await allStarted;
-    return start(request);
+    if (started.size === 4) {
+      allStarted.dispatchEvent(new Event("ready"));
+    }
+    await allStartedSignal;
+    return await start(request);
   };
   const result = await new ConcurrentBatchRunner(host, new Reader()).run(
     {
-      tasks: [{ prompt: "one" }, { prompt: "two" }, { prompt: "three" }, { prompt: "four" }],
+      tasks: [
+        { prompt: "one" },
+        { prompt: "two" },
+        { prompt: "three" },
+        { prompt: "four" },
+      ],
     },
-    parentContext,
+    parentContext
   );
   assert.deepEqual(
     result.results.map((child) => child.taskId),
-    ["task-1", "task-2", "task-3", "task-4"],
+    ["task-1", "task-2", "task-3", "task-4"]
   );
   assert.deepEqual(
     result.results.map((child) => child.status),
-    ["succeeded", "succeeded", "succeeded", "succeeded"],
+    ["succeeded", "succeeded", "succeeded", "succeeded"]
   );
   assert.equal(host.closed.length, 4);
   assert.deepEqual(
     host.startRequests.map((request) => request.placement),
-    ["tab", "tab", "tab", "tab"],
+    ["tab", "tab", "tab", "tab"]
   );
   assert.deepEqual(host.parentLabels, ["Pi [w1-p1]"]);
 });
 
-test("uses one configured placement for every child and falls back to tab", async () => {
-  for (const [placement, expected] of [
+void test("uses one configured placement for every child and falls back to tab", async () => {
+  const placements = [
     [undefined, "tab"],
     ["tab", "tab"],
     ["split", "split"],
-  ] as const) {
-    const host = new FakeChildHost();
-    await new ConcurrentBatchRunner(host, new Reader()).run(
-      { tasks: [{ prompt: "one" }, { prompt: "two" }, { prompt: "three" }] },
-      parentContext,
-      {
-        config: { defaults: placement === undefined ? {} : { placement }, roles: {} },
-        availableModels: [],
-      },
-    );
-    assert.deepEqual(
-      host.startRequests.map((request) => request.placement),
-      [expected, expected, expected],
-    );
-  }
+  ] as const;
+  await Promise.all(
+    placements.map(async ([placement, expected]) => {
+      const host = new FakeChildHost();
+      await new ConcurrentBatchRunner(host, new Reader()).run(
+        { tasks: [{ prompt: "one" }, { prompt: "two" }, { prompt: "three" }] },
+        parentContext,
+        {
+          availableModels: [],
+          config: {
+            defaults: placement === undefined ? {} : { placement },
+            roles: {},
+          },
+        }
+      );
+      assert.deepEqual(
+        host.startRequests.map((request) => request.placement),
+        [expected, expected, expected]
+      );
+    })
+  );
 });
 
-test("emits immutable request-ordered progress snapshots from initial through final settlement", async () => {
+void test("emits immutable request-ordered progress snapshots from initial through final settlement", async () => {
   const host = new FakeChildHost();
   host.sessionPaths.set(taskIdFor(0), "/tmp/one.jsonl");
   host.sessionPaths.set(taskIdFor(1), "/tmp/two.jsonl");
   const prompt = host.prompt.bind(host);
-  let releaseFirst!: () => void;
-  let secondSettled!: () => void;
-  const firstPending = new Promise<void>((resolve) => {
-    releaseFirst = resolve;
-  });
-  const secondComplete = new Promise<void>((resolve) => {
-    secondSettled = resolve;
-  });
+  const progressEvents = new EventTarget();
+  const firstPending = once(progressEvents, "first");
+  const secondComplete = once(progressEvents, "second");
+  const releaseFirst = () => progressEvents.dispatchEvent(new Event("first"));
+  const secondSettled = () => progressEvents.dispatchEvent(new Event("second"));
   host.prompt = async (child, taskPrompt) => {
-    if (child.taskId === "task-1") await firstPending;
-    else secondSettled();
-    return prompt(child, taskPrompt);
+    if (child.taskId === "task-1") {
+      await firstPending;
+    } else {
+      secondSettled();
+    }
+    return await prompt(child, taskPrompt);
   };
   const snapshots: BatchProgress[] = [];
   const pending = new ConcurrentBatchRunner(host, new Reader()).run(
     { tasks: [{ prompt: "one" }, { prompt: "two" }] },
     parentContext,
     undefined,
-    { onProgress: (snapshot) => snapshots.push(snapshot) },
+    {
+      onProgress: (snapshot) => {
+        snapshots.push(snapshot);
+      },
+    }
   );
 
   await secondComplete;
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await delay(0);
   releaseFirst();
   const result = await pending;
 
   assert.deepEqual(
     snapshots.map((snapshot) => snapshot.results.map((child) => child.taskId)),
-    [[], ["task-2"], ["task-1", "task-2"]],
+    [[], ["task-2"], ["task-1", "task-2"]]
   );
   assert.deepEqual(
     snapshots.map((snapshot) => snapshot.completed),
-    [0, 1, 2],
+    [0, 1, 2]
   );
   assert.notStrictEqual(snapshots[0].results, snapshots[1].results);
   assert.notStrictEqual(snapshots[1].results, snapshots[2].results);
@@ -438,25 +614,25 @@ test("emits immutable request-ordered progress snapshots from initial through fi
   assert.strictEqual(snapshots[2].results[1], result.results[1]);
 });
 
-test("preserves partial failures and blocked children without closing them", async () => {
+void test("preserves partial failures and blocked children without closing them", async () => {
   const host = new FakeChildHost();
   host.sessionPaths.set(taskIdFor(0), "/tmp/one.jsonl");
   host.promptErrors.set(taskIdFor(1), new Error("prompt rejected"));
   host.settlements.set(taskIdFor(2), { status: "blocked" });
   const result = await new ConcurrentBatchRunner(host, new Reader()).run(
     { tasks: [{ prompt: "one" }, { prompt: "two" }, { prompt: "three" }] },
-    parentContext,
+    parentContext
   );
   assert.deepEqual(
     result.results.map((child) => child.status),
-    ["succeeded", "failed", "blocked"],
+    ["succeeded", "failed", "blocked"]
   );
   assert.equal(host.closed.length, 1);
   assert.equal(result.results[1].error?.code, "prompt_failed");
   assert.equal(result.results[2].error?.code, "blocked");
 });
 
-test("routes independent tasks while leaving route failures pane-free", async () => {
+void test("routes independent tasks while leaving route failures pane-free", async () => {
   const host = new FakeChildHost();
   host.sessionPaths.set(taskIdFor(0), "/tmp/one.jsonl");
   host.sessionPaths.set(taskIdFor(3), "/tmp/four.jsonl");
@@ -465,37 +641,53 @@ test("routes independent tasks while leaving route failures pane-free", async ()
       tasks: [
         { prompt: "one", role: "explore" },
         { prompt: "two", role: "missing" },
-        { prompt: "three", model: "missing/model" },
-        { prompt: "four", model: "routed/model", thinking: "off" },
+        { model: "missing/model", prompt: "three" },
+        { model: "routed/model", prompt: "four", thinking: "off" },
         { prompt: "five", role: "unavailable" },
       ],
     },
     parentContext,
     {
+      availableModels: [{ id: "model", provider: "routed" }],
       config: {
         defaults: { thinking: "medium" },
         roles: {
-          explore: { prompt: "Read only.", model: ["missing/model", "routed/model"], thinking: "low" },
-          unavailable: { prompt: "Private role.", model: ["private/first", "private/model"] },
+          explore: {
+            model: ["missing/model", "routed/model"],
+            prompt: "Read only.",
+            thinking: "low",
+          },
+          unavailable: {
+            model: ["private/first", "private/model"],
+            prompt: "Private role.",
+          },
         },
       },
-      availableModels: [{ provider: "routed", id: "model" }],
-    },
+    }
   );
 
   assert.deepEqual(
     result.results.map((child) => child.status),
-    ["succeeded", "failed", "failed", "succeeded", "failed"],
+    ["succeeded", "failed", "failed", "succeeded", "failed"]
   );
   assert.deepEqual(
     result.results.map((child) => child.error?.code),
-    [undefined, "role_not_found", "model_routing_failed", undefined, "model_routing_failed"],
+    [
+      undefined,
+      "role_not_found",
+      "model_routing_failed",
+      undefined,
+      "model_routing_failed",
+    ]
   );
   assert.deepEqual(
     host.started.map((child) => child.taskId),
-    ["task-1", "task-4"],
+    ["task-1", "task-4"]
   );
-  assert.deepEqual(host.startRequests[0].context.model, { provider: "routed", id: "model" });
+  assert.deepEqual(host.startRequests[0].context.model, {
+    id: "model",
+    provider: "routed",
+  });
   assert.equal(host.startRequests[0].context.thinkingLevel, "low");
   assert.equal(host.startRequests[0].rolePrompt, "Read only.");
   assert.equal(host.startRequests[1].context.thinkingLevel, "off");
@@ -503,26 +695,32 @@ test("routes independent tasks while leaving route failures pane-free", async ()
   assert.equal(result.results[0].selection?.thinkingSource, "role");
   assert.equal(result.results[3].selection?.modelSource, "explicit");
   assert.equal(result.results[3].selection?.thinkingSource, "explicit");
-  assert.deepEqual(result.results[4].selection, { thinkingLevel: "medium", thinkingSource: "default" });
-  assert.doesNotMatch(JSON.stringify(result.results[4]), /private\/(first|model)|Private role/);
+  assert.deepEqual(result.results[4].selection, {
+    thinkingLevel: "medium",
+    thinkingSource: "default",
+  });
+  assert.doesNotMatch(
+    JSON.stringify(result.results[4]),
+    /private\/(?:first|model)|Private role/u
+  );
 });
 
-test("session cleanup closes tracked children but leaves uncertain occupants alone", async () => {
+void test("session cleanup closes tracked children but leaves uncertain occupants alone", async () => {
   const host = new FakeChildHost();
   const registry = new SessionChildRegistry();
   const first = await host.start({
-    taskId: taskIdFor(0),
+    context: parentContext,
+    parent: host.inspection,
     placement: "tab",
     sessionId: "one",
-    context: parentContext,
-    parent: host.inspection,
+    taskId: taskIdFor(0),
   });
   const second = await host.start({
-    taskId: taskIdFor(1),
-    placement: "tab",
-    sessionId: "two",
     context: parentContext,
     parent: host.inspection,
+    placement: "tab",
+    sessionId: "two",
+    taskId: taskIdFor(1),
   });
   registry.add(first);
   registry.add(second);
@@ -532,26 +730,26 @@ test("session cleanup closes tracked children but leaves uncertain occupants alo
 
   assert.deepEqual(
     host.closed.map((child) => child.taskId),
-    ["task-1"],
+    ["task-1"]
   );
 });
 
-test("parent abort leaves a started child open", async () => {
+void test("parent abort leaves a started child open", async () => {
   const host = new FakeChildHost();
   host.sessionPaths.set(taskIdFor(0), "/tmp/one.jsonl");
-  let resolvePrompt!: () => void;
+  const promptEvents = new EventTarget();
+  const promptSettled = once(promptEvents, "settled");
+  const resolvePrompt = () => promptEvents.dispatchEvent(new Event("settled"));
   host.prompt = async () =>
-    new Promise((resolve) => {
-      resolvePrompt = () => resolve({ status: "settled" });
-    });
+    await promptSettled.then(() => ({ status: "settled" }));
   const controller = new AbortController();
   const pending = new ConcurrentBatchRunner(host, new Reader()).run(
     { tasks: [{ prompt: "one" }] },
     parentContext,
-    { config: { defaults: {}, roles: {} }, availableModels: [] },
-    { signal: controller.signal },
+    { availableModels: [], config: { defaults: {}, roles: {} } },
+    { signal: controller.signal }
   );
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await delay(0);
   controller.abort();
   const result = await pending;
   resolvePrompt();

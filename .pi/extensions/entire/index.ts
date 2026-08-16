@@ -7,69 +7,109 @@
 //
 // ENTIRE_CMD is replaced at install time by Entire's installer.
 
-import { isToolCallEventType, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { execFile } from "node:child_process";
+import { once } from "node:events";
+
+import { isToolCallEventType } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { Check } from "typebox/value";
 
 const InjectedContextSchema = Type.Object(
   { inject_context: Type.Optional(Type.String()) },
-  { additionalProperties: true },
+  { additionalProperties: true }
 );
 
-type SkillEvent = { skill_name: string; invocation: string; timestamp: string };
-type EntireHookData = {
-  type: "session_start" | "before_agent_start" | "agent_end" | "session_shutdown";
+interface SkillEvent {
+  skill_name: string;
+  invocation: string;
+  timestamp: string;
+}
+interface EntireHookData {
+  type:
+    | "session_start"
+    | "before_agent_start"
+    | "agent_end"
+    | "session_shutdown";
   cwd?: string;
   session_file?: string;
   prompt?: string;
   skill_events?: SkillEvent[];
+}
+
+const parseSkillInvocation = (
+  text: string
+): { skill_name: string; invocation: string } | null => {
+  const match = /^\/skill:(?<skillName>[a-z0-9][a-z0-9-]{0,63})(?:\s|$)/u.exec(
+    text.trimStart()
+  );
+  const skillName = match?.groups?.skillName;
+  if (skillName === undefined || skillName === "") {
+    return null;
+  }
+  const invocation =
+    text.trimStart().split(/\s+/u, 1)[0] ?? `/skill:${skillName}`;
+  return { invocation, skill_name: skillName };
 };
 
-export default function (pi: ExtensionAPI) {
+const entireExtension = (pi: ExtensionAPI) => {
   // Herdr-launched subagents receive this dedicated flag because they do not
   // inherit the Parent Pi's environment. Pi preserves extension flag values
   // across /reload, so the owning process keeps the same identity after reload.
   pi.registerFlag("entire-nested", {
+    default: false,
     description: "Disable top-level Entire lifecycle hooks in a nested Pi",
     type: "boolean",
-    default: false,
   });
   const nested = pi.getFlag("entire-nested") === true;
 
-  const ENTIRE_CMD = 'entire';
+  const ENTIRE_CMD = "entire";
   let pendingSkillEvents: SkillEvent[] = [];
 
   // fireHook pipes data to `entire hooks pi <hookName>` and resolves with the
   // hook's stdout (empty string on any failure). Most hooks ignore the return;
   // before_agent_start uses it to apply a model-context injection.
-  function fireHook(hookName: string, data: EntireHookData): Promise<string> {
-    return new Promise((resolve) => {
-      try {
-        const child = execFile(
-          "sh",
-          ["-c", `${ENTIRE_CMD} hooks pi ${hookName}`],
-          { timeout: 10000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 },
-          (_err, stdout) => resolve(stdout),
-        );
-        child.stdin?.end(JSON.stringify(data));
-      } catch {
-        // best effort — never block the agent on a hook failure
-        resolve("");
-      }
-    });
-  }
+  const fireHook = async (
+    hookName: string,
+    data: EntireHookData
+  ): Promise<string> => {
+    let stdout = "";
+    try {
+      const child = execFile(
+        "sh",
+        ["-c", `${ENTIRE_CMD} hooks pi ${hookName}`],
+        { maxBuffer: 4 * 1024 * 1024, timeout: 10_000, windowsHide: true },
+        (_err, output) => {
+          stdout = output;
+        }
+      );
+      child.stdin?.end(JSON.stringify(data));
+      await once(child, "close");
+      return stdout;
+    } catch {
+      // best effort — never block the agent on a hook failure
+      return "";
+    }
+  };
 
   // parseInjectedContext scans a hook's stdout for Entire's injection envelope
   // ({"inject_context":"..."}) and returns the text to inject, or null.
-  function parseInjectedContext(stdout: string): string | null {
-    if (!stdout) return null;
+  const parseInjectedContext = (stdout: string): string | null => {
+    if (!stdout) {
+      return null;
+    }
     for (const line of stdout.split("\n")) {
       const trimmed = line.trim();
-      if (!trimmed.startsWith("{")) continue;
+      if (!trimmed.startsWith("{")) {
+        continue;
+      }
       try {
         const parsed: unknown = JSON.parse(trimmed);
-        if (Check(InjectedContextSchema, parsed) && parsed.inject_context) {
+        if (
+          Check(InjectedContextSchema, parsed) &&
+          parsed.inject_context !== undefined &&
+          parsed.inject_context !== ""
+        ) {
           return parsed.inject_context;
         }
       } catch {
@@ -77,14 +117,7 @@ export default function (pi: ExtensionAPI) {
       }
     }
     return null;
-  }
-
-  function parseSkillInvocation(text: string): { skill_name: string; invocation: string } | null {
-    const match = text.trimStart().match(/^\/skill:([a-z0-9][a-z0-9-]{0,63})(?:\s|$)/);
-    if (!match) return null;
-    const invocation = text.trimStart().split(/\s+/, 1)[0] ?? `/skill:${match[1]}`;
-    return { skill_name: match[1], invocation };
-  }
+  };
 
   // Agent-driven bash subprocesses inherit a real TTY but cannot answer
   // hook prompts. Disable git/Entire terminal prompts for bash calls so
@@ -94,30 +127,38 @@ export default function (pi: ExtensionAPI) {
   // while still inheriting the parent's TTY, and Entire's git hooks live in
   // .git/hooks independently of this extension, so a nested subagent that commits
   // needs this hardening at least as much as the parent does.
-  pi.on("tool_call", async (event) => {
-    if (!isToolCallEventType("bash", event) || event.input.command.includes("GIT_TERMINAL_PROMPT=")) {
+  pi.on("tool_call", (event) => {
+    if (
+      !isToolCallEventType("bash", event) ||
+      event.input.command.includes("GIT_TERMINAL_PROMPT=")
+    ) {
       return;
     }
-    event.input.command = "export GIT_TERMINAL_PROMPT=0\n" + event.input.command;
+    event.input.command = `export GIT_TERMINAL_PROMPT=0\n${event.input.command}`;
   });
 
   // Everything below forwards session lifecycle to Entire, which only the
   // top-level Pi may do.
-  if (nested) return;
+  if (nested) {
+    return;
+  }
 
-  pi.on("input", async (event) => {
+  pi.on("input", (event) => {
     const skill = parseSkillInvocation(event.text);
     if (skill) {
-      pendingSkillEvents.push({ ...skill, timestamp: new Date().toISOString() });
+      pendingSkillEvents.push({
+        ...skill,
+        timestamp: new Date().toISOString(),
+      });
     }
     return { action: "continue" };
   });
 
   pi.on("session_start", async (_event, ctx) => {
     await fireHook("session_start", {
-      type: "session_start",
       cwd: ctx.cwd,
       session_file: ctx.sessionManager.getSessionFile(),
+      type: "session_start",
     });
   });
 
@@ -125,36 +166,38 @@ export default function (pi: ExtensionAPI) {
     const skillEvents = pendingSkillEvents;
     pendingSkillEvents = [];
     const stdout = await fireHook("before_agent_start", {
-      type: "before_agent_start",
       cwd: ctx.cwd,
-      session_file: ctx.sessionManager.getSessionFile(),
       prompt: event.prompt,
+      session_file: ctx.sessionManager.getSessionFile(),
       skill_events: skillEvents,
+      type: "before_agent_start",
     });
     const injected = parseInjectedContext(stdout);
-    if (injected) {
-      // Inject a hidden, persistent message so the model learns about Entire.
-      // display:false keeps it out of the user-facing transcript while still
-      // sending it to the LLM. Entire emits this at most once per session.
-      return {
-        message: {
-          customType: "entire-context",
-          content: injected,
-          display: false,
-        },
-      };
-    }
+    return injected === null || injected === ""
+      ? undefined
+      : {
+          // Inject a hidden, persistent message so the model learns about Entire.
+          // display:false keeps it out of the user-facing transcript while still
+          // sending it to the LLM. Entire emits this at most once per session.
+          message: {
+            content: injected,
+            customType: "entire-context",
+            display: false,
+          },
+        };
   });
 
   pi.on("agent_end", async (_event, ctx) => {
     await fireHook("agent_end", {
-      type: "agent_end",
       cwd: ctx.cwd,
       session_file: ctx.sessionManager.getSessionFile(),
+      type: "agent_end",
     });
   });
 
   pi.on("session_shutdown", async () => {
     await fireHook("session_shutdown", { type: "session_shutdown" });
   });
-}
+};
+
+export default entireExtension;
