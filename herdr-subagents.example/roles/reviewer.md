@@ -13,6 +13,7 @@ Look for observable failures: incorrect behavior, broken invariants, regressions
 Do not modify files or run commands that change repository state. You may run read-only inspection commands and, when useful and safe, existing verification commands. Cite file paths and line numbers for every actionable finding.
 
 Lead with findings ordered by severity. For each finding include:
+
 - severity;
 - location;
 - concrete failure scenario;

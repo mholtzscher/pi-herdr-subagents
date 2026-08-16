@@ -47,13 +47,13 @@ Each child prompt begins with a unique marker:
 
 ```md
 <!-- pi-herdr-task:<task-id> -->
+
 You are a fresh Pi instance handling one bounded task for a Parent Pi.
 
-Task:
-<task prompt>
+Task: <task prompt>
 
-Work directly in the current checkout. Other Pi instances may be working concurrently.
-Return a concise final answer containing:
+Work directly in the current checkout. Other Pi instances may be working concurrently. Return a concise final answer containing:
+
 - what you found or changed;
 - verification performed;
 - unresolved issues or interference observed.
@@ -90,11 +90,7 @@ export interface SpawnBatchRequest {
 }
 
 export type ChildStatus =
-  | "succeeded"
-  | "failed"
-  | "blocked"
-  | "unattributable"
-  | "parent_aborted";
+  "succeeded" | "failed" | "blocked" | "unattributable" | "parent_aborted";
 
 export interface ChildLocation {
   workspaceId: string;
@@ -161,7 +157,7 @@ export interface BatchRunner {
     options?: {
       signal?: AbortSignal;
       onProgress?: (progress: BatchProgress) => void;
-    },
+    }
   ): Promise<SpawnBatchResult>;
 }
 ```
@@ -176,7 +172,11 @@ Owned by `src/herdr/host.ts`:
 export interface ChildHost {
   inspect(signal?: AbortSignal): Promise<HostInspection>;
   start(request: StartChildRequest, signal?: AbortSignal): Promise<HostedChild>;
-  prompt(child: HostedChild, prompt: string, signal?: AbortSignal): Promise<ChildSettlement>;
+  prompt(
+    child: HostedChild,
+    prompt: string,
+    signal?: AbortSignal
+  ): Promise<ChildSettlement>;
   close(child: HostedChild, signal?: AbortSignal): Promise<void>;
 }
 ```
@@ -249,7 +249,7 @@ pi-herdr-subagents/
 ## Delivery and verification
 
 | ID | Deliverable | Effort | Verification | Depends on |
-|---|---|---:|---|---|
+| --- | --- | --: | --- | --- |
 | D1 | Package, domain types, tool schema, and fake host | L | Package loading; 1–4 task schema validation | — |
 | D2 | Herdr protocol and Child Host | XL | Framing/capability tests; visible opt-in startup | D1 |
 | D3 | Result reader | L | Appended JSONL, ancestry, interleaving, and truncation tests | D1 |

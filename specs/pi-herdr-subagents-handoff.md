@@ -84,14 +84,18 @@ interface BatchRunner {
     options?: {
       signal?: AbortSignal;
       onProgress?: (progress: BatchProgress) => void;
-    },
+    }
   ): Promise<SpawnBatchResult>;
 }
 
 interface ChildHost {
   inspect(signal?: AbortSignal): Promise<HostInspection>;
   start(request: StartChildRequest, signal?: AbortSignal): Promise<HostedChild>;
-  prompt(child: HostedChild, prompt: string, signal?: AbortSignal): Promise<ChildSettlement>;
+  prompt(
+    child: HostedChild,
+    prompt: string,
+    signal?: AbortSignal
+  ): Promise<ChildSettlement>;
   close(child: HostedChild, signal?: AbortSignal): Promise<void>;
 }
 

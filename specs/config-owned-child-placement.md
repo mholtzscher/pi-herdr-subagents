@@ -1,9 +1,6 @@
 # Config-Owned Child Placement — Implementation Spec
 
-**Status:** Ready for task breakdown
-**Effort:** M (1–3 hours)
-**Approved by:** User
-**Date:** 2026-08-14
+**Status:** Ready for task breakdown **Effort:** M (1–3 hours) **Approved by:** User **Date:** 2026-08-14
 
 ## Decision
 
@@ -24,13 +21,13 @@ The extension continues to load configuration once at startup. Changes require `
 
 ## Deliverables
 
-| Deliverable | Effort | Depends On |
-|---|---:|---|
-| D1. Add and validate `defaults.placement` | S | — |
-| D2. Remove placement from the agent contract | S | D1 |
-| D3. Resolve placement from config in the batch runner | S | D1, D2 |
-| D4. Update active documentation and examples | S | D1–D3 |
-| D5. Run full verification | S | D1–D4 |
+| Deliverable                                           | Effort | Depends On |
+| ----------------------------------------------------- | -----: | ---------- |
+| D1. Add and validate `defaults.placement`             |      S | —          |
+| D2. Remove placement from the agent contract          |      S | D1         |
+| D3. Resolve placement from config in the batch runner |      S | D1, D2     |
+| D4. Update active documentation and examples          |      S | D1–D3      |
+| D5. Run full verification                             |      S | D1–D4      |
 
 ## Implementation Contract
 
@@ -151,7 +148,7 @@ No production files or packages are added.
 ## Acceptance and Verification
 
 | Acceptance criterion | Verification |
-|---|---|
+| --- | --- |
 | `spawn_pi` and `SpawnTask` omit task-level placement, and request validation contains no placement behavior. | Inspect the registered `SpawnPiSchema` and domain types; retain existing task count, prompt, role, model, and thinking tests. |
 | `defaults.placement` accepts `"tab"`, `"split"`, or omission. | Load temporary JSON for all three cases in `test/unit/model-routing.test.ts`. |
 | Other values, including `"pane"`, `true`, and `null`, produce the existing invalid-config result before Herdr inspection. | Add config unit cases for each value. |

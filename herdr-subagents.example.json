@@ -4,10 +4,7 @@
   },
   "defaults": {
     "placement": "tab",
-    "model": [
-      "openai-codex/gpt-5.6-luna",
-      "openai-codex/gpt-5.6-sol"
-    ],
+    "model": ["openai-codex/gpt-5.6-luna", "openai-codex/gpt-5.6-sol"],
     "thinking": "medium"
   }
 }

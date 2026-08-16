@@ -4,26 +4,40 @@ import { Check } from "typebox/value";
 
 export const PARENT_LABEL_ENTRY = "pi-herdr-parent-label";
 
-type SessionEntry = { type: string; customType?: string; data?: unknown };
+interface SessionEntry {
+  type: string;
+  customType?: string;
+  data?: unknown;
+}
 const ParentLabelSchema = Type.Object({ label: Type.String({ minLength: 1 }) });
 
-export function findParentLabel(entries: readonly SessionEntry[]): string | undefined {
+export const findParentLabel = (
+  entries: readonly SessionEntry[]
+): string | undefined => {
   for (let index = entries.length - 1; index >= 0; index -= 1) {
     const entry = entries[index];
-    if (entry.type !== "custom" || entry.customType !== PARENT_LABEL_ENTRY || !Check(ParentLabelSchema, entry.data))
+    if (
+      entry.type !== "custom" ||
+      entry.customType !== PARENT_LABEL_ENTRY ||
+      !Check(ParentLabelSchema, entry.data)
+    ) {
       continue;
+    }
     return entry.data.label;
   }
-}
+  return undefined;
+};
 
-export function loadOrCreateParentLabel(
+export const loadOrCreateParentLabel = (
   entries: readonly SessionEntry[],
   persist: (label: string) => void,
-  generate = createNameId,
-): string {
+  generate = createNameId
+): string => {
   const stored = findParentLabel(entries);
-  if (stored) return stored;
+  if (stored !== undefined && stored.length > 0) {
+    return stored;
+  }
   const label = generate();
   persist(label);
   return label;
-}
+};

@@ -22,14 +22,11 @@ One tool invocation containing one or more independent child tasks.
 **Child Task**  
 One bounded prompt assigned to one fresh Child Pi. It may request a configured Child Role plus model and thinking overrides. Child placement is a global configuration preference, not part of the task.
 
-**Child Role**
-A filename-named set of appended identity guidance and optional runtime metadata loaded from a Role Document. It does not replace Pi's normal system or project context.
+**Child Role** A filename-named set of appended identity guidance and optional runtime metadata loaded from a Role Document. It does not replace Pi's normal system or project context.
 
-**Role Document**
-One Markdown file in the Role Catalogue. Its filename stem is the case-sensitive Child Role name, optional YAML frontmatter holds `description`, `model`, and `thinking`, and its trimmed body is the role prompt.
+**Role Document** One Markdown file in the Role Catalogue. Its filename stem is the case-sensitive Child Role name, optional YAML frontmatter holds `description`, `model`, and `thinking`, and its trimmed body is the role prompt.
 
-**Role Catalogue**
-The fixed `herdr-subagents/roles/` directory beside the global `herdr-subagents.json` config. It is loaded as direct regular or symlinked `.md` files only.
+**Role Catalogue** The fixed `herdr-subagents/roles/` directory beside the global `herdr-subagents.json` config. It is loaded as direct regular or symlinked `.md` files only.
 
 **Child Result**  
 The concise final answer attributed to a Child Task, with status and resumable Pi session identity.

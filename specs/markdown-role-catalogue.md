@@ -1,9 +1,6 @@
 # Markdown Role Catalogue — Implementation Spec
 
-**Status:** Ready for task breakdown
-**Effort:** M (2–4 focused hours)
-**Approved by:** User
-**Date:** 2026-08-14
+**Status:** Ready for task breakdown **Effort:** M (2–4 focused hours) **Approved by:** User **Date:** 2026-08-14
 
 ## Problem and Decision
 
@@ -49,8 +46,7 @@ thinking: low
 
 Act as a read-only repository investigator.
 
-Locate the relevant entry points, trace important control flow, and cite file
-paths and line ranges. Do not modify files.
+Locate the relevant entry points, trace important control flow, and cite file paths and line ranges. Do not modify files.
 ```
 
 ### Discovery and naming
@@ -93,7 +89,8 @@ export interface ChildRolesConfig {
 }
 
 export type ChildRolesConfigLoadResult =
-  { ok: true; path: string; config: HerdrSubagentsConfig } | { ok: false; path: string; error: string };
+  | { ok: true; path: string; config: HerdrSubagentsConfig }
+  | { ok: false; path: string; error: string };
 ```
 
 Add only an internal frontmatter type. Treat the YAML parser result as untrusted, verify that it is empty or an object, then pass its fields through the existing `ConfigInput` validators:
@@ -113,7 +110,9 @@ No task, result, persistence, event, or API type changes are required. `ChildRol
 The exported signature remains source-compatible:
 
 ```ts
-export function loadChildRolesConfig(path = join(getAgentDir(), "herdr-subagents.json")): ChildRolesConfigLoadResult;
+export function loadChildRolesConfig(
+  path = join(getAgentDir(), "herdr-subagents.json")
+): ChildRolesConfigLoadResult;
 ```
 
 For `/path/name.json`, derive `/path/name/roles`. Load the optional global config and catalogue independently, then return one normalized `HerdrSubagentsConfig`. On failure, return the existing failure union instead of throwing during extension registration.
@@ -123,7 +122,10 @@ Private helpers may remain in `src/model-routing.ts`:
 ```ts
 function rolesDirectoryFor(configPath: string): string;
 function loadRolesDirectory(path: string): Record<string, ChildRole>;
-function parseRoleDocument(contents: string, path: string): RoleFrontmatter & { prompt: string };
+function parseRoleDocument(
+  contents: string,
+  path: string
+): RoleFrontmatter & { prompt: string };
 function parseRoleFrontmatter(value: unknown, name: string): RoleFrontmatter;
 ```
 
@@ -148,11 +150,11 @@ specs/child-roles.md                     # modify — mark its JSON role contrac
 specs/markdown-role-catalogue.md          # new — this contract
 ```
 
-| ID  | Deliverable                                                            | Effort | Depends on |
-| --- | ---------------------------------------------------------------------- | -----: | ---------- |
-| D1  | Add the `yaml` dependency and catalogue loader with strict validation  |      M | —          |
-| D2  | Move shipped role examples into Markdown and update user documentation |      S | D1         |
-| D3  | Update domain/spec references and run full verification                |      S | D1, D2     |
+| ID | Deliverable | Effort | Depends on |
+| --- | --- | --: | --- |
+| D1 | Add the `yaml` dependency and catalogue loader with strict validation | M | — |
+| D2 | Move shipped role examples into Markdown and update user documentation | S | D1 |
+| D3 | Update domain/spec references and run full verification | S | D1, D2 |
 
 Keep loading in `src/model-routing.ts`, which owns the current configuration boundary. Extracting private parsing into `src/role-catalogue.ts` is permitted only if implementation readability requires it; exported interfaces and ownership remain unchanged.
 
@@ -207,14 +209,14 @@ Use temporary directory trees in `test/unit/model-routing.test.ts` to cover path
 
 ## Risks and Mitigations
 
-| Risk                                                                  | Mitigation                                                                                                                     |
-| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Existing inline role configurations break                             | Emit an actionable migration error and document the one-file-per-role conversion while preserving metadata semantics           |
-| YAML permits surprising or expensive constructs                       | Use YAML 1.2 without custom tags, honor parser duplicate/alias protections, and apply strict type and unknown-field validation |
-| One invalid document disables all roles and orchestrator mode         | Preserve fail-closed behavior and report the exact failing source                                                              |
-| Discovery expands beyond intended local files                         | Use the fixed, non-recursive directory and direct `.md` files or symlinks only; provide no includes                            |
-| Migration changes prompt formatting                                   | Trim only document edges, preserve internal content, and test multiline paragraphs and lists                                   |
-| Direct runtime dependency is omitted because it is already transitive | Declare `yaml` in `dependencies` and verify the lockfile and clean checks                                                      |
+| Risk | Mitigation |
+| --- | --- |
+| Existing inline role configurations break | Emit an actionable migration error and document the one-file-per-role conversion while preserving metadata semantics |
+| YAML permits surprising or expensive constructs | Use YAML 1.2 without custom tags, honor parser duplicate/alias protections, and apply strict type and unknown-field validation |
+| One invalid document disables all roles and orchestrator mode | Preserve fail-closed behavior and report the exact failing source |
+| Discovery expands beyond intended local files | Use the fixed, non-recursive directory and direct `.md` files or symlinks only; provide no includes |
+| Migration changes prompt formatting | Trim only document edges, preserve internal content, and test multiline paragraphs and lists |
+| Direct runtime dependency is omitted because it is already transitive | Declare `yaml` in `dependencies` and verify the lockfile and clean checks |
 
 ## Resolved Decisions
 

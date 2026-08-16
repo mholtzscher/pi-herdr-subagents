@@ -1,7 +1,13 @@
 import { readFileSync } from "node:fs";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { Type, type Static } from "typebox";
+
+import type {
+  ExtensionAPI,
+  ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
+import type { Static } from "typebox";
 import { Check } from "typebox/value";
+
 import type { ChildRolesConfigLoadResult } from "./model-routing.js";
 
 export const ORCHESTRATOR_STATE_ENTRY = "pi-herdr-orchestrator-state";
@@ -13,35 +19,42 @@ Children share the current checkout. Avoid overlapping writes, inspect the resul
 
 const OrchestratorStateSchema = Type.Object({ enabled: Type.Boolean() });
 const SessionEntrySchema = Type.Object({
-  type: Type.String(),
   customType: Type.Optional(Type.String()),
   data: Type.Optional(Type.Unknown()),
+  type: Type.String(),
 });
 type SessionEntry = Static<typeof SessionEntrySchema>;
-const FORK_HANDOFF_KEY = "__piHerdrOrchestratorForkState";
-type OrchestratorGlobal = typeof globalThis & { [FORK_HANDOFF_KEY]?: boolean };
+type OrchestratorGlobal = typeof globalThis & {
+  __piHerdrOrchestratorForkState?: boolean;
+};
 
-export function findOrchestratorState(entries: readonly SessionEntry[]): boolean | undefined {
+export const findOrchestratorState = (
+  entries: readonly SessionEntry[]
+): boolean | undefined => {
   for (let index = entries.length - 1; index >= 0; index -= 1) {
     const entry = entries[index];
     if (
       entry.type !== "custom" ||
       entry.customType !== ORCHESTRATOR_STATE_ENTRY ||
       !Check(OrchestratorStateSchema, entry.data)
-    )
+    ) {
       continue;
+    }
     return entry.data.enabled;
   }
-}
+  return undefined;
+};
 
-export function readOrchestratorState(path: string): boolean | undefined {
+export const readOrchestratorState = (path: string): boolean | undefined => {
   try {
-    const entries = readFileSync(path, "utf8")
+    const entries = readFileSync(path, "utf-8")
       .split("\n")
       .flatMap((line): SessionEntry[] => {
-        if (!line.trim()) return [];
+        if (!line.trim()) {
+          return [];
+        }
         try {
-          const entry = JSON.parse(line);
+          const entry: unknown = JSON.parse(line);
           return Check(SessionEntrySchema, entry) ? [entry] : [];
         } catch {
           return [];
@@ -51,22 +64,47 @@ export function readOrchestratorState(path: string): boolean | undefined {
   } catch {
     return undefined;
   }
-}
+};
 
-export function registerOrchestrator(pi: ExtensionAPI, configResult: ChildRolesConfigLoadResult): void {
+const hasHerdrParentEnvironment = (): boolean =>
+  process.env.HERDR_ENV === "1" &&
+  Boolean(process.env.HERDR_WORKSPACE_ID) &&
+  Boolean(process.env.HERDR_TAB_ID) &&
+  Boolean(process.env.HERDR_PANE_ID) &&
+  Boolean(process.env.HERDR_SOCKET_PATH);
+
+const unavailableMessage = (
+  configResult: ChildRolesConfigLoadResult
+): string =>
+  configResult.ok
+    ? "△ Orchestrator unavailable\n  Requires a Herdr Parent with spawn_pi active."
+    : `! Orchestrator disabled — invalid config\n  ${configResult.path}\n  ${configResult.error}\n  spawn_pi blocked`;
+
+export const registerOrchestrator = (
+  pi: ExtensionAPI,
+  configResult: ChildRolesConfigLoadResult
+): void => {
   let enabled = false;
 
-  const available = () => configResult.ok && hasHerdrParentEnvironment() && pi.getActiveTools().includes("spawn_pi");
+  const available = () =>
+    configResult.ok &&
+    hasHerdrParentEnvironment() &&
+    pi.getActiveTools().includes("spawn_pi");
 
-  function updateStatus(ctx: ExtensionContext): void {
-    ctx.ui.setStatus("orchestrator", enabled && available() ? ctx.ui.theme.fg("accent", "orchestrator") : undefined);
-  }
+  const updateStatus = (ctx: ExtensionContext): void => {
+    ctx.ui.setStatus(
+      "orchestrator",
+      enabled && available()
+        ? ctx.ui.theme.fg("accent", "orchestrator")
+        : undefined
+    );
+  };
 
-  function persist(): void {
+  const persist = (): void => {
     pi.appendEntry(ORCHESTRATOR_STATE_ENTRY, { enabled });
-  }
+  };
 
-  function setEnabled(next: boolean, ctx: ExtensionContext): void {
+  const setEnabled = (next: boolean, ctx: ExtensionContext): void => {
     if (next && !available()) {
       enabled = false;
       updateStatus(ctx);
@@ -76,16 +114,23 @@ export function registerOrchestrator(pi: ExtensionAPI, configResult: ChildRolesC
     enabled = next;
     persist();
     updateStatus(ctx);
-    ctx.ui.notify(enabled ? "✓ Orchestrator enabled" : "○ Orchestrator disabled", "info");
-  }
+    ctx.ui.notify(
+      enabled ? "✓ Orchestrator enabled" : "○ Orchestrator disabled",
+      "info"
+    );
+  };
 
   pi.registerCommand("orchestrator", {
     description: "Toggle or inspect Parent orchestrator mode",
     getArgumentCompletions: (prefix) => {
       const values = ["on", "off", "status", "toggle"];
-      const matches = values.filter((value) => value.startsWith(prefix)).map((value) => ({ value, label: value }));
+      const matches = values
+        .filter((value) => value.startsWith(prefix))
+        .map((value) => ({ label: value, value }));
       return matches.length ? matches : null;
     },
+    // The ExtensionAPI requires a Promise-returning handler; all command work is synchronous.
+    // oxlint-disable-next-line eslint/require-await
     handler: async (args, ctx) => {
       const action = args.trim().toLowerCase() || "toggle";
       if (action === "status") {
@@ -96,46 +141,75 @@ export function registerOrchestrator(pi: ExtensionAPI, configResult: ChildRolesC
         const roles =
           isAvailable && configResult.ok
             ? Object.entries(configResult.config.roles)
-                .map(([name, role]) => (role.description ? `${name} (${role.description})` : name))
+                .map(([name, role]) =>
+                  role.description !== undefined && role.description.length > 0
+                    ? `${name} (${role.description})`
+                    : name
+                )
                 .join(" · ") || "none"
             : undefined;
-        ctx.ui.notify(roles ? `${message}\n  Roles  ${roles}` : message, isAvailable ? "info" : "warning");
+        ctx.ui.notify(
+          roles === undefined ? message : `${message}\n  Roles  ${roles}`,
+          isAvailable ? "info" : "warning"
+        );
         return;
       }
-      if (action === "off") return setEnabled(false, ctx);
+      if (action === "off") {
+        setEnabled(false, ctx);
+        return;
+      }
       if (!available()) {
         ctx.ui.notify(unavailableMessage(configResult), "warning");
         return;
       }
-      if (action === "on") return setEnabled(true, ctx);
-      if (action === "toggle") return setEnabled(!enabled, ctx);
+      if (action === "on") {
+        setEnabled(true, ctx);
+        return;
+      }
+      if (action === "toggle") {
+        setEnabled(!enabled, ctx);
+        return;
+      }
       ctx.ui.notify("! Usage: /orchestrator [on|off|status|toggle]", "error");
     },
   });
 
   pi.on("session_before_fork", () => {
-    // SAFETY: This extension owns FORK_HANDOFF_KEY on globalThis and stores only the local boolean state.
-    (globalThis as OrchestratorGlobal)[FORK_HANDOFF_KEY] = enabled;
+    // SAFETY: This extension owns __piHerdrOrchestratorForkState on globalThis and stores only the local boolean state.
+    (globalThis as OrchestratorGlobal).__piHerdrOrchestratorForkState = enabled;
   });
 
   pi.on("session_start", (event, ctx) => {
-    // SAFETY: This extension owns FORK_HANDOFF_KEY on globalThis and reads it only as an optional boolean.
+    // SAFETY: This extension owns __piHerdrOrchestratorForkState on globalThis and reads it only as an optional boolean.
     const shared = globalThis as OrchestratorGlobal;
-    const memoryHandoff = event.reason === "fork" ? shared[FORK_HANDOFF_KEY] : undefined;
-    delete shared[FORK_HANDOFF_KEY];
+    const memoryHandoff =
+      event.reason === "fork"
+        ? shared.__piHerdrOrchestratorForkState
+        : undefined;
+    delete shared.__piHerdrOrchestratorForkState;
     const entries = ctx.sessionManager.getEntries();
     const stored = findOrchestratorState(entries);
     const fileHandoff =
-      event.reason === "fork" && event.previousSessionFile
+      event.reason === "fork" &&
+      event.previousSessionFile !== undefined &&
+      event.previousSessionFile.length > 0
         ? readOrchestratorState(event.previousSessionFile)
         : undefined;
     const inherited = memoryHandoff ?? fileHandoff;
-    enabled = inherited ?? stored ?? (configResult.ok ? configResult.config.orchestrator.enabled : false);
+    enabled =
+      inherited ??
+      stored ??
+      (configResult.ok ? configResult.config.orchestrator.enabled : false);
 
     if (!configResult.ok) {
       enabled = false;
-      if (ctx.hasUI) ctx.ui.notify(unavailableMessage(configResult), "warning");
-    } else if (available() && (inherited !== undefined || stored === undefined)) {
+      if (ctx.hasUI) {
+        ctx.ui.notify(unavailableMessage(configResult), "warning");
+      }
+    } else if (
+      available() &&
+      (inherited !== undefined || stored === undefined)
+    ) {
       persist();
     }
     updateStatus(ctx);
@@ -143,23 +217,10 @@ export function registerOrchestrator(pi: ExtensionAPI, configResult: ChildRolesC
 
   pi.on("before_agent_start", (event, ctx) => {
     updateStatus(ctx);
-    if (!enabled || !available()) return;
-    return { systemPrompt: `${event.systemPrompt}\n\n${ORCHESTRATOR_INSTRUCTIONS}` };
+    return enabled && available()
+      ? {
+          systemPrompt: `${event.systemPrompt}\n\n${ORCHESTRATOR_INSTRUCTIONS}`,
+        }
+      : undefined;
   });
-}
-
-function hasHerdrParentEnvironment(): boolean {
-  return (
-    process.env.HERDR_ENV === "1" &&
-    Boolean(process.env.HERDR_WORKSPACE_ID) &&
-    Boolean(process.env.HERDR_TAB_ID) &&
-    Boolean(process.env.HERDR_PANE_ID) &&
-    Boolean(process.env.HERDR_SOCKET_PATH)
-  );
-}
-
-function unavailableMessage(configResult: ChildRolesConfigLoadResult): string {
-  return configResult.ok
-    ? "△ Orchestrator unavailable\n  Requires a Herdr Parent with spawn_pi active."
-    : `! Orchestrator disabled — invalid config\n  ${configResult.path}\n  ${configResult.error}\n  spawn_pi blocked`;
-}
+};

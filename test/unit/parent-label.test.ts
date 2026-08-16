@@ -1,12 +1,29 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { findParentLabel, loadOrCreateParentLabel, PARENT_LABEL_ENTRY } from "../../src/parent-label.js";
 
-test("reuses the latest stored internal Parent label", () => {
+import {
+  findParentLabel,
+  loadOrCreateParentLabel,
+  PARENT_LABEL_ENTRY,
+} from "../../src/parent-label.js";
+
+void test("reuses the latest stored internal Parent label", () => {
   const entries = [
-    { type: "custom", customType: PARENT_LABEL_ENTRY, data: { label: "first-parent" } },
-    { type: "custom", customType: "other-extension", data: { label: "ignored" } },
-    { type: "custom", customType: PARENT_LABEL_ENTRY, data: { label: "latest-parent" } },
+    {
+      customType: PARENT_LABEL_ENTRY,
+      data: { label: "first-parent" },
+      type: "custom",
+    },
+    {
+      customType: "other-extension",
+      data: { label: "ignored" },
+      type: "custom",
+    },
+    {
+      customType: PARENT_LABEL_ENTRY,
+      data: { label: "latest-parent" },
+      type: "custom",
+    },
   ];
   let persisted = false;
 
@@ -15,7 +32,7 @@ test("reuses the latest stored internal Parent label", () => {
     () => {
       persisted = true;
     },
-    () => "generated-parent",
+    () => "generated-parent"
   );
 
   assert.equal(findParentLabel(entries), "latest-parent");
@@ -23,7 +40,7 @@ test("reuses the latest stored internal Parent label", () => {
   assert.equal(persisted, false);
 });
 
-test("persists a generated Parent label when none exists", () => {
+void test("persists a generated Parent label when none exists", () => {
   let persisted: string | undefined;
 
   const label = loadOrCreateParentLabel(
@@ -31,7 +48,7 @@ test("persists a generated Parent label when none exists", () => {
     (value) => {
       persisted = value;
     },
-    () => "calm-otter",
+    () => "calm-otter"
   );
 
   assert.equal(label, "calm-otter");
