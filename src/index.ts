@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 import { ConcurrentBatchRunner } from "./batch.js";
+import { lookupHerdrChildStatus } from "./cost.js";
 import { HerdrChildHost, SessionChildRegistry } from "./herdr/host.js";
 import { loadChildRolesConfig } from "./model-routing.js";
 import { registerOrchestrator } from "./orchestrator.js";
@@ -34,7 +35,7 @@ export default function piHerdrSubagents(pi: ExtensionAPI): void {
     },
     childRolesConfig
   );
-  registerOrchestrator(pi, childRolesConfig);
+  registerOrchestrator(pi, childRolesConfig, lookupHerdrChildStatus);
 
   pi.on("session_shutdown", async (event) => {
     if (event.reason === "reload") {
