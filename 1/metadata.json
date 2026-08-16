@@ -1,0 +1,185 @@
+{
+  "cli_version": "0.10.0",
+  "checkpoint_id": "01M05HSEZPVP31RB5K4R9BFJCH",
+  "session_id": "01a00acb-8247-7c1c-8a21-f62a5d5971ad",
+  "strategy": "manual-commit",
+  "created_at": "2026-08-16T15:07:08.632053Z",
+  "branch": "ultracite",
+  "checkpoints_count": 7,
+  "save_step_count": 7,
+  "files_touched": [
+    ".github/workflows/ci.yml",
+    ".oxfmtrc.json",
+    ".oxlintrc.json",
+    "CHANGELOG.md",
+    "CONTEXT.md",
+    "README.md",
+    "herdr-subagents.example.json",
+    "herdr-subagents.example/roles/explore.md",
+    "herdr-subagents.example/roles/reviewer.md",
+    "oxfmt.config.ts",
+    "oxlint.config.ts",
+    "package.json",
+    "pnpm-lock.yaml",
+    "specs/child-roles.md",
+    "specs/config-owned-child-placement.md",
+    "specs/markdown-role-catalogue.md",
+    "specs/pi-herdr-subagents-handoff.md",
+    "specs/pi-herdr-subagents-rfc.md",
+    "src/batch.ts",
+    "src/domain.ts",
+    "src/herdr/host.ts",
+    "src/herdr/protocol.ts",
+    "src/index.ts",
+    "src/model-routing.ts",
+    "src/orchestrator.ts",
+    "src/parent-label.ts",
+    "src/results.ts",
+    "src/tools.ts",
+    "test/integration/batch.test.ts",
+    "test/integration/protocol.test.ts",
+    "test/support/fake-child-host.ts",
+    "test/support/fake-herdr-server.ts",
+    "test/unit/domain.test.ts",
+    "test/unit/entire-extension.test.ts",
+    "test/unit/model-routing.test.ts",
+    "test/unit/orchestrator.test.ts",
+    "test/unit/parent-label.test.ts",
+    "test/unit/results.test.ts",
+    "test/unit/tools.test.ts",
+    "tools/oxlint/anti-slop/index.ts",
+    "tools/oxlint/anti-slop/rules/no-chained-type-assertions.ts",
+    "tools/oxlint/anti-slop/rules/no-conditional-empty-object-spread.ts",
+    "tools/oxlint/anti-slop/rules/no-known-value-widening.ts",
+    "tools/oxlint/anti-slop/rules/no-module-mocking.ts",
+    "tools/oxlint/anti-slop/rules/no-object-parameters.ts",
+    "tools/oxlint/anti-slop/rules/no-reflect-apply.ts",
+    "tools/oxlint/anti-slop/rules/no-reflect-get.ts",
+    "tools/oxlint/anti-slop/rules/no-runtime-typeof.ts",
+    "tools/oxlint/anti-slop/rules/no-shape-in-symbol-names.ts",
+    "tools/oxlint/anti-slop/rules/no-unknown-parameters.ts",
+    "tools/oxlint/anti-slop/rules/no-unknown-returns.ts",
+    "tools/oxlint/anti-slop/rules/no-unknown-type-aliases.ts",
+    "tools/oxlint/anti-slop/rules/no-unsafe-dictionary-type.ts",
+    "tools/oxlint/anti-slop/rules/no-widen-then-assert.ts",
+    "tools/oxlint/anti-slop/rules/require-safety-comment-for-type-assertion.ts",
+    "tools/oxlint/anti-slop/shared/dictionary-types.ts",
+    "tools/oxlint/anti-slop/shared/reflect-method.ts"
+  ],
+  "agent": "Pi",
+  "model": "gpt-5.6-sol",
+  "turn_id": "8b65cc47a9c2",
+  "compact_transcript_start": 0,
+  "token_usage": {
+    "input_tokens": 287211,
+    "cache_creation_tokens": 0,
+    "cache_read_tokens": 5127680,
+    "output_tokens": 15179,
+    "api_call_count": 72
+  },
+  "session_metrics": {
+    "turn_count": 7
+  },
+  "prompt_attributions": [
+    {
+      "checkpoint_number": 1,
+      "user_lines_added": 0,
+      "user_lines_removed": 0,
+      "agent_lines_added": 0,
+      "agent_lines_removed": 0
+    },
+    {
+      "checkpoint_number": 2,
+      "user_lines_added": 86,
+      "user_lines_removed": 47,
+      "agent_lines_added": 4026,
+      "agent_lines_removed": 3887,
+      "user_added_per_file": {
+        ".pi/extensions/entire/index.ts": 86
+      },
+      "user_removed_per_file": {
+        ".pi/extensions/entire/index.ts": 47
+      }
+    },
+    {
+      "checkpoint_number": 3,
+      "user_lines_added": 86,
+      "user_lines_removed": 47,
+      "agent_lines_added": 4026,
+      "agent_lines_removed": 3885,
+      "user_added_per_file": {
+        ".pi/extensions/entire/index.ts": 86
+      },
+      "user_removed_per_file": {
+        ".pi/extensions/entire/index.ts": 47
+      }
+    },
+    {
+      "checkpoint_number": 4,
+      "user_lines_added": 100,
+      "user_lines_removed": 55,
+      "agent_lines_added": 4252,
+      "agent_lines_removed": 3959,
+      "user_added_per_file": {
+        ".pi/extensions/entire/index.ts": 92,
+        "test/unit/results.test.ts": 8
+      },
+      "user_removed_per_file": {
+        ".pi/extensions/entire/index.ts": 49,
+        "test/unit/results.test.ts": 6
+      }
+    },
+    {
+      "checkpoint_number": 5,
+      "user_lines_added": 102,
+      "user_lines_removed": 59,
+      "agent_lines_added": 4328,
+      "agent_lines_removed": 3991,
+      "user_added_per_file": {
+        ".pi/extensions/entire/index.ts": 102
+      },
+      "user_removed_per_file": {
+        ".pi/extensions/entire/index.ts": 59
+      }
+    },
+    {
+      "checkpoint_number": 6,
+      "user_lines_added": 102,
+      "user_lines_removed": 59,
+      "agent_lines_added": 4328,
+      "agent_lines_removed": 3991,
+      "user_added_per_file": {
+        ".pi/extensions/entire/index.ts": 102
+      },
+      "user_removed_per_file": {
+        ".pi/extensions/entire/index.ts": 59
+      }
+    },
+    {
+      "checkpoint_number": 7,
+      "user_lines_added": 102,
+      "user_lines_removed": 59,
+      "agent_lines_added": 4328,
+      "agent_lines_removed": 3991,
+      "user_added_per_file": {
+        ".pi/extensions/entire/index.ts": 102
+      },
+      "user_removed_per_file": {
+        ".pi/extensions/entire/index.ts": 59
+      }
+    },
+    {
+      "checkpoint_number": 8,
+      "user_lines_added": 102,
+      "user_lines_removed": 59,
+      "agent_lines_added": 4328,
+      "agent_lines_removed": 3991,
+      "user_added_per_file": {
+        ".pi/extensions/entire/index.ts": 102
+      },
+      "user_removed_per_file": {
+        ".pi/extensions/entire/index.ts": 59
+      }
+    }
+  ]
+}

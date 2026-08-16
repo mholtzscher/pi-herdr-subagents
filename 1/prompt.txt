@@ -1,0 +1,25 @@
+i think we can simplify our linting setup and use https://www.ultracite.ai/ it should also include the anti-slop oxlint plugins so we don't have to vendor them ourselves
+
+---
+
+i want the minimal config needed. make sure we don't have extra config files
+
+---
+
+add that dep
+
+---
+
+try again. but don't changing reasoning effort from defaults
+
+---
+
+can you tell me the cost of this session?
+
+---
+
+include child pi sessions
+
+---
+
+launch a new instance of pi to QA all our changes
