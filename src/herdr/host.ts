@@ -271,7 +271,6 @@ const piArgs = (
     request.sessionId,
     "--name",
     childLabel(request),
-    "--entire-nested",
     "--exclude-tools",
     "spawn_pi",
   ];
