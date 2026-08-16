@@ -35,15 +35,13 @@ const SpawnTaskSchema = Type.Object({
     })
   ),
   thinking: Type.Optional(
-    StringEnum([
-      "off",
-      "minimal",
-      "low",
-      "medium",
-      "high",
-      "xhigh",
-      "max",
-    ] as const)
+    StringEnum(
+      ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const,
+      {
+        description:
+          "Optional exact thinking-level override; omit by default and set only when the user requests it or the task cannot succeed with the configured or inherited level",
+      }
+    )
   ),
 });
 
@@ -454,6 +452,7 @@ export const registerSpawnPiTool = (
     promptGuidelines: [
       "Use spawn_pi only for 1–8 independent tasks; children share the checkout and may interfere with concurrent edits.",
       "Set task.role only to an exact name listed under Configured Child Roles; otherwise omit role.",
+      "Omit task.thinking by default so configured or inherited reasoning effort applies. Override it only when the user requests a level or the task cannot succeed without a different level.",
       ...(guidance !== undefined && guidance.length > 0 ? [guidance] : []),
     ],
     promptSnippet:
