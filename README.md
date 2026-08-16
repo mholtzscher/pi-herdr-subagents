@@ -8,15 +8,15 @@ An expert-pilot [Pi](https://pi.dev) package that adds `spawn_pi`: one call star
 pi install /path/to/pi-herdr-subagents
 ```
 
-The package loads safely outside Herdr. Calling `spawn_pi` there returns an actionable unavailable result instead of crashing Pi.
+The package loads safely outside Herdr and keeps `spawn_pi` inactive there.
 
 ## Use
 
-Ask Parent Pi to call `spawn_pi` with independent tasks. Children use the global placement configured in `~/.pi/agent/herdr-subagents.json`, defaulting to separate no-focus tabs when it is omitted. The live result card shows every task in request order as `working`, `complete`, `needs input`, or `incomplete`; requested roles appear as visible row badges, while runtime details appear only when expanded.
+Enable orchestrator mode, then ask Parent Pi to call `spawn_pi` with independent tasks. Children use the global placement configured in `~/.pi/agent/herdr-subagents.json`, defaulting to separate no-focus tabs when it is omitted. The live result card shows every task in request order as `working`, `complete`, `needs input`, or `incomplete`; requested roles appear as visible row badges, while runtime details appear only when expanded.
 
 ### Orchestrator mode
 
-Use `/orchestrator` to toggle a Parent mode that proactively delegates useful bounded exploration, independent implementation, and review while retaining responsibility for synthesis and final verification. Explicit forms are `/orchestrator on`, `/orchestrator off`, and `/orchestrator status`. A footer indicator is shown while the mode is enabled.
+Use `/orchestrator` to toggle a Parent mode that proactively delegates useful bounded exploration, independent implementation, and review while retaining responsibility for synthesis and final verification. Explicit forms are `/orchestrator on`, `/orchestrator off`, and `/orchestrator status`. A footer indicator is shown while the mode is enabled. Turning orchestrator mode off also disables the `spawn_pi` tool; turning it on restores the tool.
 
 Use `/orchestrator cost` for a current-session snapshot showing the Parent, each discovered Child Pi, the children subtotal, and the grand total. It reads usage already persisted in the Parent and child session files, so an in-flight response appears only after Pi persists it. The displayed values use Pi's recorded model-cost metadata and are estimates rather than invoices.
 

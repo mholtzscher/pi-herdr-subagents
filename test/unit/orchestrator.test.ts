@@ -93,6 +93,9 @@ const harness = (
     registerCommand(name: string, command: Command) {
       commands.set(name, command);
     },
+    setActiveTools(names: string[]) {
+      activeTools.splice(0, activeTools.length, ...names);
+    },
   } as ExtensionAPI;
   registerOrchestrator(pi, configResult, lookupChildStatus);
   const command = commands.get("orchestrator");
@@ -243,6 +246,31 @@ void test("uses the configured default, persists it, injects instructions, and t
   });
 });
 
+void test("disables spawn_pi when configured off and follows command toggles", async () => {
+  await withParentEnvironment(async () => {
+    const activeTools = ["read", "spawn_pi"];
+    const h = harness(
+      {
+        ...enabledConfig,
+        config: {
+          ...enabledConfig.config,
+          orchestrator: { enabled: false },
+        },
+      },
+      activeTools
+    );
+
+    h.emit("session_start", { reason: "new" });
+    assert.deepEqual(activeTools, ["read"]);
+
+    await h.command.handler("on", h.ctx);
+    assert.deepEqual(activeTools, ["read", "spawn_pi"]);
+
+    await h.command.handler("off", h.ctx);
+    assert.deepEqual(activeTools, ["read"]);
+  });
+});
+
 void test("cost reports a snapshot while orchestrator mode is disabled or unavailable", async () => {
   await withParentEnvironment(async () => {
     const disabled = harness(enabledConfig);
@@ -388,7 +416,7 @@ void test("hands current state to in-memory forks", async () => {
 
 void test("keeps enabled preference while spawn_pi is temporarily inactive", async () => {
   await withParentEnvironment(() => {
-    const activeTools: string[] = [];
+    const activeTools = ["spawn_pi"];
     const h = harness(enabledConfig, activeTools);
     h.setEntries([
       {
@@ -398,6 +426,7 @@ void test("keeps enabled preference while spawn_pi is temporarily inactive", asy
       },
     ]);
     h.emit("session_start", { reason: "resume" });
+    activeTools.splice(0);
     assert.equal(
       h.emit("before_agent_start", { systemPrompt: "base" }),
       undefined
@@ -411,7 +440,7 @@ void test("keeps enabled preference while spawn_pi is temporarily inactive", asy
 
 void test("disables and persists while spawn_pi is inactive", async () => {
   await withParentEnvironment(async () => {
-    const activeTools: string[] = [];
+    const activeTools = ["spawn_pi"];
     const h = harness(enabledConfig, activeTools);
     h.setEntries([
       {
@@ -421,6 +450,7 @@ void test("disables and persists while spawn_pi is inactive", async () => {
       },
     ]);
     h.emit("session_start", { reason: "resume" });
+    activeTools.splice(0);
 
     await h.command.handler("off", h.ctx);
     assert.deepEqual(h.appended.at(-1), {

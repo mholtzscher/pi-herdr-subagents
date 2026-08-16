@@ -88,16 +88,28 @@ export const registerOrchestrator = (
   lookupChildStatus: ChildStatusLookup
 ): void => {
   let enabled = false;
+  const spawnPiSupported = pi.getActiveTools().includes("spawn_pi");
 
   const available = () =>
-    configResult.ok &&
-    hasHerdrParentEnvironment() &&
-    pi.getActiveTools().includes("spawn_pi");
+    configResult.ok && hasHerdrParentEnvironment() && spawnPiSupported;
+
+  const setSpawnPiActive = (active: boolean): void => {
+    const activeTools = pi.getActiveTools();
+    const isActive = activeTools.includes("spawn_pi");
+    if (active === isActive) {
+      return;
+    }
+    pi.setActiveTools(
+      active
+        ? [...activeTools, "spawn_pi"]
+        : activeTools.filter((name) => name !== "spawn_pi")
+    );
+  };
 
   const updateStatus = (ctx: ExtensionContext): void => {
     ctx.ui.setStatus(
       "orchestrator",
-      enabled && available()
+      enabled && available() && pi.getActiveTools().includes("spawn_pi")
         ? ctx.ui.theme.fg("accent", "orchestrator")
         : undefined
     );
@@ -110,12 +122,14 @@ export const registerOrchestrator = (
   const setEnabled = (next: boolean, ctx: ExtensionContext): void => {
     if (next && !available()) {
       enabled = false;
+      setSpawnPiActive(false);
       updateStatus(ctx);
       ctx.ui.notify(unavailableMessage(configResult), "warning");
       return;
     }
     enabled = next;
     persist();
+    setSpawnPiActive(enabled && available());
     updateStatus(ctx);
     ctx.ui.notify(
       enabled ? "✓ Orchestrator enabled" : "○ Orchestrator disabled",
@@ -224,12 +238,13 @@ export const registerOrchestrator = (
     ) {
       persist();
     }
+    setSpawnPiActive(enabled && available());
     updateStatus(ctx);
   });
 
   pi.on("before_agent_start", (event, ctx) => {
     updateStatus(ctx);
-    return enabled && available()
+    return enabled && available() && pi.getActiveTools().includes("spawn_pi")
       ? {
           systemPrompt: `${event.systemPrompt}\n\n${ORCHESTRATOR_INSTRUCTIONS}`,
         }
