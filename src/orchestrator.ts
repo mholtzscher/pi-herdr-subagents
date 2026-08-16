@@ -8,6 +8,8 @@ import { Type } from "typebox";
 import type { Static } from "typebox";
 import { Check } from "typebox/value";
 
+import { formatOrchestratorCost, readOrchestratorCost } from "./cost.js";
+import type { ChildStatusLookup } from "./cost.js";
 import type { ChildRolesConfigLoadResult } from "./model-routing.js";
 
 export const ORCHESTRATOR_STATE_ENTRY = "pi-herdr-orchestrator-state";
@@ -82,7 +84,8 @@ const unavailableMessage = (
 
 export const registerOrchestrator = (
   pi: ExtensionAPI,
-  configResult: ChildRolesConfigLoadResult
+  configResult: ChildRolesConfigLoadResult,
+  lookupChildStatus: ChildStatusLookup
 ): void => {
   let enabled = false;
 
@@ -123,16 +126,22 @@ export const registerOrchestrator = (
   pi.registerCommand("orchestrator", {
     description: "Toggle or inspect Parent orchestrator mode",
     getArgumentCompletions: (prefix) => {
-      const values = ["on", "off", "status", "toggle"];
+      const values = ["on", "off", "status", "cost", "toggle"];
       const matches = values
         .filter((value) => value.startsWith(prefix))
         .map((value) => ({ label: value, value }));
       return matches.length ? matches : null;
     },
-    // The ExtensionAPI requires a Promise-returning handler; all command work is synchronous.
-    // oxlint-disable-next-line eslint/require-await
     handler: async (args, ctx) => {
       const action = args.trim().toLowerCase() || "toggle";
+      if (action === "cost") {
+        const snapshot = await readOrchestratorCost(
+          ctx.sessionManager.getEntries(),
+          lookupChildStatus
+        );
+        ctx.ui.notify(formatOrchestratorCost(snapshot), "info");
+        return;
+      }
       if (action === "status") {
         const isAvailable = available();
         const message = isAvailable
@@ -170,7 +179,10 @@ export const registerOrchestrator = (
         setEnabled(!enabled, ctx);
         return;
       }
-      ctx.ui.notify("! Usage: /orchestrator [on|off|status|toggle]", "error");
+      ctx.ui.notify(
+        "! Usage: /orchestrator [on|off|status|cost|toggle]",
+        "error"
+      );
     },
   });
 

@@ -6,6 +6,7 @@ import test from "node:test";
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
+import type { ChildStatusLookup } from "../../src/cost.js";
 import type { ChildRolesConfigLoadResult } from "../../src/model-routing.js";
 import {
   findOrchestratorState,
@@ -42,12 +43,21 @@ type Handler = (
   ctx: HarnessContext
 ) => { systemPrompt: string } | undefined;
 interface Command {
+  getArgumentCompletions?: (
+    prefix: string
+  ) => { label: string; value: string }[] | null;
   handler: (args: string, ctx: HarnessContext) => Promise<void>;
 }
 
+const noChildStatus: ChildStatusLookup = async () => {
+  await Promise.resolve();
+  return "open";
+};
+
 const harness = (
   configResult: ChildRolesConfigLoadResult,
-  activeTools = ["spawn_pi"]
+  activeTools = ["spawn_pi"],
+  lookupChildStatus: ChildStatusLookup = noChildStatus
 ) => {
   const handlers = new Map<string, Handler[]>();
   const commands = new Map<string, Command>();
@@ -84,7 +94,7 @@ const harness = (
       commands.set(name, command);
     },
   } as ExtensionAPI;
-  registerOrchestrator(pi, configResult);
+  registerOrchestrator(pi, configResult, lookupChildStatus);
   const command = commands.get("orchestrator");
   if (!command) {
     throw new Error("orchestrator command was not registered");
@@ -229,6 +239,39 @@ void test("uses the configured default, persists it, injects instructions, and t
     assert.deepEqual(h.notifications.at(-1), {
       level: "info",
       message: "✓ Orchestrator enabled",
+    });
+  });
+});
+
+void test("cost reports a snapshot while orchestrator mode is disabled or unavailable", async () => {
+  await withParentEnvironment(async () => {
+    const disabled = harness(enabledConfig);
+    disabled.emit("session_start", { reason: "new" });
+    await disabled.command.handler("off", disabled.ctx);
+    await disabled.command.handler("cost", disabled.ctx);
+
+    const expected = [
+      "Orchestrator cost · current session",
+      "",
+      "Parent                              $0.0000",
+      "Children  none",
+      "Children subtotal                   $0.0000",
+      "Total                               $0.0000",
+    ].join("\n");
+    assert.deepEqual(disabled.notifications.at(-1), {
+      level: "info",
+      message: expected,
+    });
+    assert.deepEqual(disabled.command.getArgumentCompletions?.("co"), [
+      { label: "cost", value: "cost" },
+    ]);
+
+    const unavailable = harness(enabledConfig, []);
+    unavailable.emit("session_start", { reason: "new" });
+    await unavailable.command.handler("cost", unavailable.ctx);
+    assert.deepEqual(unavailable.notifications.at(-1), {
+      level: "info",
+      message: expected,
     });
   });
 });
@@ -402,7 +445,7 @@ void test("reports invalid command usage", async () => {
 
     assert.deepEqual(h.notifications.at(-1), {
       level: "error",
-      message: "! Usage: /orchestrator [on|off|status|toggle]",
+      message: "! Usage: /orchestrator [on|off|status|cost|toggle]",
     });
   });
 });
