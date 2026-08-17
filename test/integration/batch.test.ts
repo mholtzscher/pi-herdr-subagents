@@ -1,3 +1,4 @@
+// oxlint-disable promise/avoid-new
 import assert from "node:assert/strict";
 import { getEventListeners, once } from "node:events";
 import { readFileSync, statSync } from "node:fs";
@@ -16,6 +17,7 @@ import {
   SessionChildRegistry,
   StartChildError,
 } from "../../src/herdr/host.js";
+import type { ChildSettlement } from "../../src/herdr/host.js";
 import type { HerdrRequest } from "../../src/herdr/protocol.js";
 import type { ChildResultReader } from "../../src/results.js";
 import { FakeChildHost, parentContext } from "../support/fake-child-host.js";
@@ -63,6 +65,13 @@ const captureHerdrCall = (request: HerdrRequest): CapturedHerdrCall => {
 const readyShell = () => ({
   process_info: { foreground_processes: [{ pid: 101 }], shell_pid: 101 },
 });
+
+const flushMicrotasks = async (): Promise<void> => {
+  for (let index = 0; index < 8; index += 1) {
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Drain sequential promise continuations.
+    await Promise.resolve();
+  }
+};
 
 void test("rejects spawn outside a Herdr Parent pane without crashing", async () => {
   const original = process.env.HERDR_ENV;
@@ -733,14 +742,252 @@ void test("session cleanup closes tracked children but leaves uncertain occupant
   );
 });
 
+void test("completes normally before the configured runtime timeout", async (context) => {
+  context.mock.timers.enable({ apis: ["Date", "setTimeout"] });
+  const host = new FakeChildHost();
+  host.sessionPaths.set(taskIdFor(0), "/tmp/one.jsonl");
+
+  const result = await new ConcurrentBatchRunner(host, new Reader()).run(
+    { tasks: [{ prompt: "one" }] },
+    parentContext,
+    {
+      availableModels: [],
+      config: { defaults: { timeoutSeconds: 1 }, roles: {} },
+    }
+  );
+
+  assert.equal(result.results[0].status, "succeeded");
+  assert.equal(result.results[0].elapsedMs, undefined);
+  assert.equal(host.closed.length, 1);
+});
+
+void test("allows the global runtime timeout to be explicitly disabled", async (context) => {
+  context.mock.timers.enable({ apis: ["Date", "setTimeout"] });
+  const host = new FakeChildHost();
+  host.sessionPaths.set(taskIdFor(0), "/tmp/one.jsonl");
+  let settlePrompt: ((settlement: ChildSettlement) => void) | undefined;
+  host.prompt = async () =>
+    await new Promise<ChildSettlement>((resolve) => {
+      settlePrompt = resolve;
+    });
+  const pending = new ConcurrentBatchRunner(host, new Reader()).run(
+    { tasks: [{ prompt: "one" }] },
+    parentContext,
+    {
+      availableModels: [],
+      config: { defaults: { timeoutSeconds: false }, roles: {} },
+    }
+  );
+  await flushMicrotasks();
+  context.mock.timers.tick(600_000);
+  await flushMicrotasks();
+
+  assert.equal(host.closed.length, 0);
+  assert.ok(settlePrompt !== undefined);
+  settlePrompt({ status: "settled" });
+  const result = await pending;
+
+  assert.equal(result.results[0].status, "succeeded");
+  assert.equal(result.results[0].elapsedMs, undefined);
+  assert.equal(host.closed.length, 1);
+});
+
+void test("times out a child, aborts its prompt wait, and closes its pane", async (context) => {
+  context.mock.timers.enable({ apis: ["Date", "setTimeout"] });
+  const host = new FakeChildHost();
+  host.sessionPaths.set(taskIdFor(0), "/tmp/one.jsonl");
+  let promptAborted = false;
+  host.prompt = async (_child, _prompt, signal) =>
+    await new Promise<ChildSettlement>((_resolve, reject) => {
+      signal?.addEventListener(
+        "abort",
+        () => {
+          promptAborted = true;
+          reject(new Error("prompt wait aborted"));
+        },
+        { once: true }
+      );
+    });
+  const pending = new ConcurrentBatchRunner(host, new Reader()).run(
+    { tasks: [{ prompt: "one" }] },
+    parentContext,
+    {
+      availableModels: [],
+      config: { defaults: { timeoutSeconds: 1 }, roles: {} },
+    }
+  );
+  await flushMicrotasks();
+  context.mock.timers.tick(1000);
+  const result = await pending;
+
+  assert.equal(promptAborted, true);
+  assert.equal(result.results[0].status, "timed_out");
+  assert.equal(result.results[0].error?.code, "timed_out");
+  assert.equal(result.results[0].elapsedMs, 1000);
+  assert.equal(result.results[0].paneClosed, true);
+  assert.equal(result.results[0].sessionPath, "/tmp/one.jsonl");
+  assert.deepEqual(
+    host.closed.map((child) => child.taskId),
+    ["task-1"]
+  );
+});
+
+void test("reports a timed-out pane as open when verified close fails", async (context) => {
+  context.mock.timers.enable({ apis: ["Date", "setTimeout"] });
+  const host = new FakeChildHost();
+  host.sessionPaths.set(taskIdFor(0), "/tmp/one.jsonl");
+  host.closeErrors.set(taskIdFor(0), new Error("occupant changed"));
+  host.prompt = async (_child, _prompt, signal) =>
+    await new Promise<ChildSettlement>((_resolve, reject) => {
+      signal?.addEventListener(
+        "abort",
+        () => {
+          reject(new Error("aborted"));
+        },
+        { once: true }
+      );
+    });
+  const pending = new ConcurrentBatchRunner(host, new Reader()).run(
+    { tasks: [{ prompt: "one" }] },
+    parentContext,
+    {
+      availableModels: [],
+      config: { defaults: { timeoutSeconds: 1 }, roles: {} },
+    }
+  );
+  await flushMicrotasks();
+  context.mock.timers.tick(1000);
+  const result = await pending;
+
+  assert.equal(result.results[0].status, "timed_out");
+  assert.equal(result.results[0].paneClosed, false);
+  assert.equal(host.closed.length, 0);
+});
+
+void test("stops waiting when verified pane closure does not settle", async (context) => {
+  context.mock.timers.enable({ apis: ["Date", "setTimeout"] });
+  const host = new FakeChildHost();
+  host.sessionPaths.set(taskIdFor(0), "/tmp/one.jsonl");
+  host.prompt = async (_child, _prompt, signal) =>
+    await new Promise<ChildSettlement>((_resolve, reject) => {
+      signal?.addEventListener(
+        "abort",
+        () => {
+          reject(new Error("aborted"));
+        },
+        { once: true }
+      );
+    });
+  host.close = async (_child, signal) => {
+    await new Promise<void>((_resolve, reject) => {
+      signal?.addEventListener(
+        "abort",
+        () => {
+          reject(new Error("close timed out"));
+        },
+        { once: true }
+      );
+    });
+  };
+  const pending = new ConcurrentBatchRunner(host, new Reader()).run(
+    { tasks: [{ prompt: "one" }] },
+    parentContext,
+    {
+      availableModels: [],
+      config: { defaults: { timeoutSeconds: 1 }, roles: {} },
+    }
+  );
+  await flushMicrotasks();
+  context.mock.timers.tick(1000);
+  await flushMicrotasks();
+  context.mock.timers.tick(5000);
+  const result = await pending;
+
+  assert.equal(result.results[0].status, "timed_out");
+  assert.equal(result.results[0].paneClosed, false);
+});
+
+void test("races concurrent child timeouts independently", async (context) => {
+  context.mock.timers.enable({ apis: ["Date", "setTimeout"] });
+  const host = new FakeChildHost();
+  host.sessionPaths.set(taskIdFor(0), "/tmp/one.jsonl");
+  host.sessionPaths.set(taskIdFor(1), "/tmp/two.jsonl");
+  host.prompt = async (child, _taskPrompt, signal) => {
+    if (child.taskId === "task-1") {
+      return await new Promise<ChildSettlement>((resolve) => {
+        setTimeout(() => {
+          resolve({ status: "settled" });
+        }, 500);
+      });
+    }
+    return await new Promise<ChildSettlement>((_resolve, reject) => {
+      signal?.addEventListener(
+        "abort",
+        () => {
+          reject(new Error("aborted"));
+        },
+        { once: true }
+      );
+    });
+  };
+  const pending = new ConcurrentBatchRunner(host, new Reader()).run(
+    { tasks: [{ prompt: "one" }, { prompt: "two" }] },
+    parentContext,
+    {
+      availableModels: [],
+      config: { defaults: { timeoutSeconds: 1 }, roles: {} },
+    }
+  );
+  await flushMicrotasks();
+  context.mock.timers.tick(500);
+  await flushMicrotasks();
+  context.mock.timers.tick(500);
+  const result = await pending;
+
+  assert.deepEqual(
+    result.results.map((child) => child.status),
+    ["succeeded", "timed_out"]
+  );
+  assert.deepEqual(
+    host.closed.map((child) => child.taskId),
+    ["task-1", "task-2"]
+  );
+});
+
+void test("does not prompt a child when the Parent is already aborted", async () => {
+  const host = new FakeChildHost();
+  let prompted = false;
+  host.prompt = async () => {
+    await Promise.resolve();
+    prompted = true;
+    throw new Error("unexpected prompt");
+  };
+  const controller = new AbortController();
+  controller.abort();
+
+  const result = await new ConcurrentBatchRunner(host, new Reader()).run(
+    { tasks: [{ prompt: "one" }] },
+    parentContext,
+    { availableModels: [], config: { defaults: {}, roles: {} } },
+    { signal: controller.signal }
+  );
+
+  assert.equal(result.results[0].status, "parent_aborted");
+  assert.equal(prompted, false);
+  assert.equal(host.closed.length, 0);
+});
+
 void test("parent abort leaves a started child open", async () => {
   const host = new FakeChildHost();
   host.sessionPaths.set(taskIdFor(0), "/tmp/one.jsonl");
   const promptEvents = new EventTarget();
   const promptSettled = once(promptEvents, "settled");
   const resolvePrompt = () => promptEvents.dispatchEvent(new Event("settled"));
-  host.prompt = async () =>
-    await promptSettled.then(() => ({ status: "settled" }));
+  let promptSignal: AbortSignal | undefined;
+  host.prompt = async (_child, _prompt, signal) => {
+    promptSignal = signal;
+    return await promptSettled.then(() => ({ status: "settled" }));
+  };
   const controller = new AbortController();
   const pending = new ConcurrentBatchRunner(host, new Reader()).run(
     { tasks: [{ prompt: "one" }] },
@@ -753,5 +1000,6 @@ void test("parent abort leaves a started child open", async () => {
   const result = await pending;
   resolvePrompt();
   assert.equal(result.results[0].status, "parent_aborted");
+  assert.equal(promptSignal?.aborted, false);
   assert.equal(host.closed.length, 0);
 });

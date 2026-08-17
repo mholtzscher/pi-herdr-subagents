@@ -25,6 +25,7 @@ export interface ChildRuntimeDefaults {
 
 export interface ChildDefaults extends ChildRuntimeDefaults {
   placement?: ChildPlacement;
+  timeoutSeconds?: number | false;
 }
 
 export interface ChildRole extends ChildRuntimeDefaults {
@@ -113,6 +114,9 @@ const ThinkingLevelSchema = Type.Union([
   Type.Literal("xhigh"),
   Type.Literal("max"),
 ]);
+const MAX_TIMEOUT_SECONDS = 2_147_483;
+export const DEFAULT_TIMEOUT_SECONDS = 600;
+
 const THINKING_LEVELS: readonly ChildThinkingLevel[] = [
   "off",
   "minimal",
@@ -250,6 +254,23 @@ const validateThinking = (
   return value;
 };
 
+const validateTimeoutSeconds = (
+  value: ConfigInput,
+  name: string
+): number | false => {
+  if (value === false) {
+    return false;
+  }
+  if (
+    !Check(Type.Integer({ maximum: MAX_TIMEOUT_SECONDS, minimum: 1 }), value)
+  ) {
+    throw new Error(
+      `${name} must be false or a positive integer no greater than ${MAX_TIMEOUT_SECONDS}`
+    );
+  }
+  return value;
+};
+
 const parseOrchestrator = (value: ConfigInput): OrchestratorConfig => {
   const orchestrator = parseObject(value, "orchestrator");
   rejectUnsupported(orchestrator, ["enabled"], "orchestrator");
@@ -261,8 +282,12 @@ const parseOrchestrator = (value: ConfigInput): OrchestratorConfig => {
 
 const parseDefaults = (value: ConfigInput, name: string): ChildDefaults => {
   const defaults = parseObject(value, name);
-  rejectUnsupported(defaults, ["placement", "model", "thinking"], name);
-  const result: ChildDefaults = {};
+  rejectUnsupported(
+    defaults,
+    ["placement", "model", "thinking", "timeoutSeconds"],
+    name
+  );
+  const result: ChildDefaults = { timeoutSeconds: DEFAULT_TIMEOUT_SECONDS };
   if (defaults.placement !== undefined) {
     result.placement = validatePlacement(
       defaults.placement,
@@ -274,6 +299,12 @@ const parseDefaults = (value: ConfigInput, name: string): ChildDefaults => {
   }
   if (defaults.thinking !== undefined) {
     result.thinking = validateThinking(defaults.thinking, `${name}.thinking`);
+  }
+  if (defaults.timeoutSeconds !== undefined) {
+    result.timeoutSeconds = validateTimeoutSeconds(
+      defaults.timeoutSeconds,
+      `${name}.timeoutSeconds`
+    );
   }
   return result;
 };
@@ -295,7 +326,7 @@ const parseConfig = (
       : parseOrchestrator(config.orchestrator);
   const defaults =
     config.defaults === undefined
-      ? {}
+      ? { timeoutSeconds: DEFAULT_TIMEOUT_SECONDS }
       : parseDefaults(config.defaults, "defaults");
   return { defaults, orchestrator };
 };
@@ -474,7 +505,7 @@ export const loadChildRolesConfig = (
 ): ChildRolesConfigLoadResult => {
   const rolesPath = rolesDirectoryFor(configPath);
   let globalConfig: Omit<HerdrSubagentsConfig, "roles"> = {
-    defaults: {},
+    defaults: { timeoutSeconds: DEFAULT_TIMEOUT_SECONDS },
     orchestrator: { enabled: false },
   };
 
@@ -608,6 +639,6 @@ export const roleGuidance = (config: ChildRolesConfig): string | undefined => {
 };
 
 export const emptyChildRolesConfig = (): ChildRolesConfig => ({
-  defaults: {},
+  defaults: { timeoutSeconds: DEFAULT_TIMEOUT_SECONDS },
   roles: {},
 });

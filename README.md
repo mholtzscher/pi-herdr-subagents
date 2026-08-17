@@ -40,6 +40,7 @@ The global config contains only Orchestrator and Child defaults:
   "orchestrator": { "enabled": false },
   "defaults": {
     "placement": "tab",
+    "timeoutSeconds": 600,
     "model": ["openai-codex/gpt-5.6-luna", "openai-codex/gpt-5.6-sol"],
     "thinking": "medium"
   }
@@ -47,6 +48,8 @@ The global config contains only Orchestrator and Child defaults:
 ```
 
 `defaults.placement` is a global user-interface preference accepting `"tab"` or `"split"`. It applies to every child, cannot be set by a task or role, and falls back to `"tab"` when omitted.
+
+`defaults.timeoutSeconds` is the global runtime limit for each child after startup. It accepts a positive integer up to `2147483`, defaults to `600` seconds when omitted, and can be set to `false` to disable the limit. Timed-out children have only their outstanding prompt wait aborted; their attributed session ID and path are retained, and their pane is closed after occupant verification when possible.
 
 Each role is a Markdown document in `~/.pi/agent/herdr-subagents/roles/`; direct `.md` symlinks, such as those created by Home Manager, are supported. Its filename stem is the case-sensitive role name. Put optional `description`, `model`, and `thinking` metadata in YAML frontmatter; the trimmed document body is the appended identity prompt:
 

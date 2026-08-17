@@ -64,7 +64,11 @@ export class FakeChildHost implements ChildHost {
     return await Promise.resolve(child);
   }
 
-  async prompt(child: HostedChild, _prompt: string): Promise<ChildSettlement> {
+  async prompt(
+    child: HostedChild,
+    _prompt: string,
+    _signal?: AbortSignal
+  ): Promise<ChildSettlement> {
     const error = this.promptErrors.get(child.taskId);
     if (error) {
       throw error;
@@ -74,7 +78,7 @@ export class FakeChildHost implements ChildHost {
     );
   }
 
-  async close(child: HostedChild): Promise<void> {
+  async close(child: HostedChild, _signal?: AbortSignal): Promise<void> {
     const error = this.closeErrors.get(child.taskId);
     if (error) {
       throw error;
