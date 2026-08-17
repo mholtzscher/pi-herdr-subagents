@@ -27,7 +27,7 @@ Every delegated task must be independently completable and state:
 
 Use the smallest useful batch. Prefer parallel delegation for independent, read-heavy work. For implementation, assign explicit, disjoint file or module ownership; otherwise run tasks sequentially or handle them yourself. Never use vague tasks such as "explore the codebase", "fix the feature", or "review everything".
 
-Children share the current checkout and cannot invoke spawn_pi. Inspect all resulting changes yourself, treat child reports as inputs rather than proof, and run final verification before responding.`;
+Children share the current checkout and cannot invoke spawn_pi. For child-made file changes, review only the decision-critical parts of the diff needed to confirm scope and correctness, then run focused final verification. Do not retrace the child's implementation or broadly reread changed files. For read-only child reports, treat the report as evidence: verify only decision-critical claims and avoid broadly repeating sufficiently evidenced exploration. If a child reports a blocker, validate only the minimum evidence needed, then surface the blocker or ask the user for the required scope decision. You remain responsible for final correctness and focused verification.`;
 
 const OrchestratorStateSchema = Type.Object({ enabled: Type.Boolean() });
 const SessionEntrySchema = Type.Object({

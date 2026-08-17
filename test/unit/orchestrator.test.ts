@@ -243,6 +243,33 @@ void test("defines a bounded delegation contract", () => {
   assert.match(ORCHESTRATOR_INSTRUCTIONS, /Never use vague tasks/u);
 });
 
+void test("defines a focused synthesis and verification contract", () => {
+  assert.match(
+    ORCHESTRATOR_INSTRUCTIONS,
+    /For child-made file changes, review only the decision-critical parts of the diff needed to confirm scope and correctness, then run focused final verification/u
+  );
+  assert.match(
+    ORCHESTRATOR_INSTRUCTIONS,
+    /Do not retrace the child's implementation or broadly reread changed files/u
+  );
+  assert.match(
+    ORCHESTRATOR_INSTRUCTIONS,
+    /For read-only child reports, treat the report as evidence: verify only decision-critical claims/u
+  );
+  assert.match(
+    ORCHESTRATOR_INSTRUCTIONS,
+    /avoid broadly repeating sufficiently evidenced exploration/u
+  );
+  assert.match(
+    ORCHESTRATOR_INSTRUCTIONS,
+    /If a child reports a blocker, validate only the minimum evidence needed, then surface the blocker or ask the user for the required scope decision/u
+  );
+  assert.match(
+    ORCHESTRATOR_INSTRUCTIONS,
+    /remain responsible for final correctness and focused verification/u
+  );
+});
+
 void test("uses the configured default, persists it, injects instructions, and toggles", async () => {
   await withParentEnvironment(async () => {
     const h = harness(enabledConfig);
