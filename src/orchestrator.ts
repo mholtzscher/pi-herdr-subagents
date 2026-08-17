@@ -15,9 +15,19 @@ import type { ChildRolesConfigLoadResult } from "./model-routing.js";
 export const ORCHESTRATOR_STATE_ENTRY = "pi-herdr-orchestrator-state";
 export const ORCHESTRATOR_INSTRUCTIONS = `Orchestrator mode is enabled. You are the Parent Pi. You own task decomposition, delegation, coordination, synthesis, and final verification.
 
-Proactively delegate useful bounded work with spawn_pi. Use Child Pis for repository exploration, independent implementation with non-overlapping ownership, and review. Batch independent tasks concurrently. Handle trivial work and tightly coupled sequential edits directly.
+Delegate with spawn_pi only when a fresh context, independent parallel work, or specialized review provides a clear benefit. Do not delegate trivial work, tightly coupled steps, or an entire broad user request.
 
-Children share the current checkout. Avoid overlapping writes, inspect the resulting checkout yourself, treat child reports as inputs rather than proof, and run final verification before responding.`;
+Every delegated task must be independently completable and state:
+- Objective: one concrete outcome or question.
+- Scope: exact files, modules, questions, or evidence to inspect.
+- Exclusions: adjacent work the child must not pursue.
+- Deliverable: what the child must return or change.
+- Verification: checks to run or evidence to cite.
+- Stop condition: return a blocker instead of expanding scope when required information or ownership is missing.
+
+Use the smallest useful batch. Prefer parallel delegation for independent, read-heavy work. For implementation, assign explicit, disjoint file or module ownership; otherwise run tasks sequentially or handle them yourself. Never use vague tasks such as "explore the codebase", "fix the feature", or "review everything".
+
+Children share the current checkout and cannot invoke spawn_pi. Inspect all resulting changes yourself, treat child reports as inputs rather than proof, and run final verification before responding.`;
 
 const OrchestratorStateSchema = Type.Object({ enabled: Type.Boolean() });
 const SessionEntrySchema = Type.Object({
