@@ -16,7 +16,7 @@ Enable orchestrator mode, then ask Parent Pi to call `spawn_pi` with independent
 
 ### Orchestrator mode
 
-Use `/orchestrator` to toggle a Parent mode that proactively delegates useful bounded exploration, independent implementation, and review while retaining responsibility for synthesis and final verification. Explicit forms are `/orchestrator on`, `/orchestrator off`, and `/orchestrator status`. A footer indicator is shown while the mode is enabled. Turning orchestrator mode off also disables the `spawn_pi` tool; turning it on restores the tool.
+Use `/orchestrator` to toggle a Parent mode that delegates only when fresh context, independent parallel work, or specialized review provides a clear benefit. Every Child Task must identify its objective, scope, exclusions, deliverable, verification, and stop condition. The Parent uses the smallest useful batch, prefers parallel read-heavy work, assigns disjoint ownership for concurrent implementation, and retains responsibility for synthesis and final verification. Explicit forms are `/orchestrator on`, `/orchestrator off`, and `/orchestrator status`. A footer indicator is shown while the mode is enabled. Turning orchestrator mode off also disables the `spawn_pi` tool; turning it on restores the tool.
 
 Use `/orchestrator cost` for a current-session snapshot showing the Parent, each discovered Child Pi, the children subtotal, and the grand total. It reads usage already persisted in the Parent and child session files, so an in-flight response appears only after Pi persists it. The displayed values use Pi's recorded model-cost metadata and are estimates rather than invoices.
 

@@ -219,6 +219,30 @@ void test("finds the latest session-wide state and reads it from JSONL", () => {
   }
 });
 
+void test("defines a bounded delegation contract", () => {
+  assert.match(ORCHESTRATOR_INSTRUCTIONS, /Delegate with spawn_pi only when/u);
+  assert.match(
+    ORCHESTRATOR_INSTRUCTIONS,
+    /Do not delegate trivial work, tightly coupled steps, or an entire broad user request/u
+  );
+  for (const requirement of [
+    "- Objective: one concrete outcome or question.",
+    "- Scope: exact files, modules, questions, or evidence to inspect.",
+    "- Exclusions: adjacent work the child must not pursue.",
+    "- Deliverable: what the child must return or change.",
+    "- Verification: checks to run or evidence to cite.",
+    "- Stop condition: return a blocker instead of expanding scope when required information or ownership is missing.",
+  ]) {
+    assert.ok(ORCHESTRATOR_INSTRUCTIONS.includes(requirement));
+  }
+  assert.match(ORCHESTRATOR_INSTRUCTIONS, /Use the smallest useful batch/u);
+  assert.match(
+    ORCHESTRATOR_INSTRUCTIONS,
+    /assign explicit, disjoint file or module ownership/u
+  );
+  assert.match(ORCHESTRATOR_INSTRUCTIONS, /Never use vague tasks/u);
+});
+
 void test("uses the configured default, persists it, injects instructions, and toggles", async () => {
   await withParentEnvironment(async () => {
     const h = harness(enabledConfig);

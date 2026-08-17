@@ -67,4 +67,9 @@ void test("builds the exact task marker envelope", () => {
     prompt,
     /respect any configured Child role, including read-only constraints/u
   );
+  assert.match(prompt, /Do only the delegated task/u);
+  assert.match(prompt, /Do not broaden the investigation/u);
+  assert.match(prompt, /modify files outside your stated ownership/u);
+  assert.match(prompt, /cannot be completed within scope/u);
+  assert.match(prompt, /report the blocker and stop/u);
 });
