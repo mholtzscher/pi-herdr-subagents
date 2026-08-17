@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.5.0](https://github.com/mholtzscher/pi-herdr-subagents/compare/v1.4.0...v1.5.0) (2026-08-17)
+
+
+### Features
+
+* **orchestrator:** toggle spawn_pi tool activity with orchestrator mode ([7263938](https://github.com/mholtzscher/pi-herdr-subagents/commit/726393830bd35fa9308ab142a7ae12fcfdd00a97))
+
+
+### Bug Fixes
+
+* defer spawn_pi tool detection until session start ([c1994c9](https://github.com/mholtzscher/pi-herdr-subagents/commit/c1994c928d803c428c345fd9db4364d4f933f7ad))
+* **orchestrator:** bound delegated tasks ([2b55fba](https://github.com/mholtzscher/pi-herdr-subagents/commit/2b55fbaf0df4ef609362fccbe47d4ce63c00dbd3))
+* **orchestrator:** bound delegated tasks ([7e53bb1](https://github.com/mholtzscher/pi-herdr-subagents/commit/7e53bb121d25ca2527eee1a6685b301a1a3d1bd7))
+
 ## [1.4.0](https://github.com/mholtzscher/pi-herdr-subagents/compare/v1.3.0...v1.4.0) (2026-08-16)
 
 
