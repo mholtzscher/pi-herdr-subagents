@@ -231,6 +231,52 @@ const finalBatchStatus = (
 const summarizeProgress = (progress: BatchProgress): string =>
   `spawn_pi: working · ${progress.completed} of ${progress.total} settled`;
 
+const MODEL_VISIBLE_CHILD_SUMMARY_MAX_CHARS = 8000;
+const MODEL_VISIBLE_SUMMARIES_MAX_CHARS = 32_000;
+
+const childSessionReference = (child: ChildResult): string => {
+  if (child.sessionId !== undefined && child.sessionId.length > 0) {
+    return `session ${child.sessionId}`;
+  }
+  if (child.sessionPath !== undefined && child.sessionPath.length > 0) {
+    return `session path ${child.sessionPath}`;
+  }
+  return "the child session (no session ID/path was recorded)";
+};
+
+const appendSuccessfulSummaries = (
+  lines: string[],
+  results: ChildResult[]
+): void => {
+  const successful = results.filter(
+    (child) =>
+      child.status === "succeeded" &&
+      child.summary !== undefined &&
+      child.summary.length > 0
+  );
+  if (successful.length === 0) {
+    return;
+  }
+  const maxChars = Math.min(
+    MODEL_VISIBLE_CHILD_SUMMARY_MAX_CHARS,
+    Math.floor(MODEL_VISIBLE_SUMMARIES_MAX_CHARS / successful.length)
+  );
+  for (const child of successful) {
+    const summary = child.summary ?? "";
+    const modelVisibleTruncated = summary.length > maxChars;
+    lines.push("", `# ${child.taskId} result`, summary.slice(0, maxChars));
+    if (child.truncated || modelVisibleTruncated) {
+      const reasons = [
+        ...(child.truncated ? ["during child result collection"] : []),
+        ...(modelVisibleTruncated ? ["for model-visible output"] : []),
+      ];
+      lines.push(
+        `[${child.taskId} result truncated ${reasons.join(" and ")}; inspect ${childSessionReference(child)} for the full response.]`
+      );
+    }
+  }
+};
+
 const summarize = (result: SpawnBatchResult): string => {
   const details: SpawnPiDisplayDetails = { phase: "finished", result };
   const batchState = batchDisplayState(details);
@@ -256,6 +302,7 @@ const summarize = (result: SpawnBatchResult): string => {
     }
     lines.push(line);
   }
+  appendSuccessfulSummaries(lines, orderedResults(result.results));
   return lines.join("\n");
 };
 
