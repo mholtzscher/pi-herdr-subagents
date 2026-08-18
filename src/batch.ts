@@ -31,6 +31,8 @@ const VERIFIED_CLOSE_TIMEOUT_MS = 5000;
 const runtimeTimeout = (routing: ModelRoutingContext): number | false =>
   routing.config.defaults.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS;
 
+const isAborted = (signal?: AbortSignal): boolean => signal?.aborted === true;
+
 const visibleSelection = (
   selection: ChildRuntimeSelection
 ): Omit<ChildRuntimeSelection, "rolePrompt"> => {
@@ -93,12 +95,14 @@ const waitForPrompt = async (
     };
 
     if (signal?.aborted === true) {
+      timeoutController.abort();
       finish({ kind: "parent_aborted" });
       return;
     }
     signal?.addEventListener(
       "abort",
       () => {
+        timeoutController.abort();
         finish({ kind: "parent_aborted" });
       },
       { once: true, signal: cleanup.signal }
@@ -135,6 +139,73 @@ const closeExpectedChild = async (
   }
 };
 
+const startErrorResult = async (
+  cause: unknown,
+  signal: AbortSignal | undefined,
+  base: Omit<ChildResult, "status" | "error">,
+  host: ChildHost,
+  children: Map<string, HostedChild>
+): Promise<ChildResult> => {
+  const childFields = fieldsForStartError(cause);
+  const partialChild =
+    cause instanceof StartChildError ? cause.child : undefined;
+  if (partialChild) {
+    children.set(partialChild.taskId, partialChild);
+  }
+  if (signal?.aborted !== true) {
+    return {
+      ...base,
+      ...childFields,
+      error: { code: "start_failed", message: messageOf(cause) },
+      status: "failed",
+    };
+  }
+  const paneClosed = partialChild
+    ? await closeExpectedChild(host, partialChild)
+    : false;
+  return {
+    ...base,
+    ...childFields,
+    error: {
+      code: "parent_aborted",
+      message: paneClosed
+        ? "Parent stopped waiting during startup; verified child pane closed"
+        : "Parent stopped waiting before child startup completed",
+    },
+    paneClosed,
+    status: "parent_aborted",
+  };
+};
+
+const cleanupOpenChildrenAfterAbort = async (
+  results: ChildResult[],
+  children: Map<string, HostedChild>,
+  host: ChildHost
+): Promise<ChildResult[]> =>
+  await Promise.all(
+    results.map(async (result) => {
+      if (result.paneClosed || result.status === "parent_aborted") {
+        return result;
+      }
+      const child = children.get(result.taskId);
+      if (!child || !(await closeExpectedChild(host, child))) {
+        return result;
+      }
+      return {
+        ...result,
+        error:
+          result.status === "blocked"
+            ? {
+                code: "blocked" as const,
+                message:
+                  "Child requires input; verified pane closed after Parent abort",
+              }
+            : result.error,
+        paneClosed: true,
+      };
+    })
+  );
+
 const terminalPromptResult = async (
   outcome: PromptOutcome,
   base: Omit<ChildResult, "status" | "error">,
@@ -146,14 +217,18 @@ const terminalPromptResult = async (
   | { outcome: Extract<PromptOutcome, { kind: "error" | "settled" }> }
 > => {
   if (outcome.kind === "parent_aborted") {
+    const paneClosed = await closeExpectedChild(host, child);
     return {
       result: {
         ...base,
         ...childFields,
         error: {
           code: "parent_aborted",
-          message: "Parent stopped waiting; child remains open",
+          message: paneClosed
+            ? "Parent stopped waiting; verified child pane closed"
+            : "Parent stopped waiting; child pane could not be safely closed",
         },
+        paneClosed,
         status: "parent_aborted",
       },
     };
@@ -227,6 +302,17 @@ export class ConcurrentBatchRunner implements BatchRunner {
       return result;
     }
 
+    if (isAborted(options.signal)) {
+      const result = ConcurrentBatchRunner.abortBeforeStart(request);
+      options.onProgress?.({
+        completed: total,
+        results: [...result.results],
+        total,
+      });
+      return result;
+    }
+
+    const children = new Map<string, HostedChild>();
     const settled: (ChildResult | undefined)[] = Array.from({ length: total });
     const snapshot = () => {
       const results = settled.filter(
@@ -242,14 +328,25 @@ export class ConcurrentBatchRunner implements BatchRunner {
           context,
           routing,
           parent,
-          options.signal
+          options.signal,
+          children
         );
         settled[requestIndex] = result;
         snapshot();
         return result;
       })
     );
-    return { requested: total, results };
+    if (!isAborted(options.signal)) {
+      return { requested: total, results };
+    }
+    const cleanedResults = await cleanupOpenChildrenAfterAbort(
+      results,
+      children,
+      this.host
+    );
+    settled.splice(0, total, ...cleanedResults);
+    snapshot();
+    return { requested: total, results: cleanedResults };
   }
 
   private async runTask(
@@ -258,7 +355,8 @@ export class ConcurrentBatchRunner implements BatchRunner {
     context: ParentContext,
     routing: ModelRoutingContext,
     parent: Awaited<ReturnType<ChildHost["inspect"]>>,
-    signal: AbortSignal | undefined
+    signal: AbortSignal | undefined,
+    children: Map<string, HostedChild>
   ): Promise<ChildResult> {
     const taskId = taskIdFor(requestIndex);
     const resolution = resolveChildRuntime({ parent: context, routing, task });
@@ -304,23 +402,10 @@ export class ConcurrentBatchRunner implements BatchRunner {
         },
         signal
       );
+      children.set(taskId, child);
       startedAt = Date.now();
     } catch (error) {
-      const childFields = fieldsForStartError(error);
-      const result: ChildResult = {
-        ...base,
-        ...childFields,
-        error:
-          signal?.aborted === true
-            ? {
-                code: "parent_aborted",
-                message:
-                  "Parent stopped waiting before child startup completed",
-              }
-            : { code: "start_failed", message: messageOf(error) },
-        status: signal?.aborted === true ? "parent_aborted" : "failed",
-      };
-      return result;
+      return await startErrorResult(error, signal, base, this.host, children);
     }
     const childFields = {
       location: child.location,

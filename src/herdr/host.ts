@@ -262,6 +262,13 @@ const childName = (taskId: TaskId): string =>
 const isNonEmpty = (value: string | undefined): value is string =>
   value !== undefined && value !== "";
 
+const sessionPathMatchesId = (
+  sessionPath: string | undefined,
+  sessionId: string
+): boolean =>
+  isNonEmpty(sessionPath) &&
+  path.basename(sessionPath).endsWith(`_${sessionId}.jsonl`);
+
 const piArgs = (
   request: StartChildRequest,
   rolePromptPath?: string
@@ -553,7 +560,10 @@ export class HerdrChildHost implements ChildHost {
     if (
       !current ||
       current.pane_id !== child.location.paneId ||
-      current.terminal_id !== child.terminalId
+      !isNonEmpty(child.terminalId) ||
+      current.terminal_id !== child.terminalId ||
+      !sessionPathMatchesId(child.sessionPath, child.sessionId) ||
+      current.agent_session?.value !== child.sessionPath
     ) {
       throw new HerdrProtocolError(
         "occupant_changed",

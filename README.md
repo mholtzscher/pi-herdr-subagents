@@ -86,7 +86,7 @@ pi --session <id>
 
 All children work in the Parent Pi's current checkout concurrently. They can overwrite or invalidate each other's edits, observe changing files, and interfere through tests or Git operations. This package does no locking, write detection, reconciliation, rollback, persistence, or background collection. Review the final checkout yourself.
 
-Blocked, failed, interrupted, and unattributable children are deliberately left visible in Herdr for inspection while the Parent session remains active. Parent abort stops collection only; it does not interrupt or close accepted children. When the Parent Pi exits or switches to a new, resumed, or forked session, the extension closes still-open child panes it created after verifying their occupants. `/reload` does not close children.
+Blocked, failed, and unattributable children are deliberately left visible in Herdr for inspection while the Parent session remains active. Parent abort stops collection, interrupts each outstanding prompt wait, and attempts to close every started child after verifying that the expected Pi still occupies its pane. The result retains each known child session ID/path for `/resume` and reports whether its pane was actually closed; if occupant verification fails, the pane is left untouched. When the Parent Pi exits or switches to a new, resumed, or forked session, the extension closes still-open child panes it created after verifying their occupants. `/reload` does not close children.
 
 ## Development
 
