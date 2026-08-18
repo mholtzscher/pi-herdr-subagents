@@ -42,7 +42,10 @@ export class FakeChildHost implements ChildHost {
     await Promise.resolve();
   }
 
-  async start(request: StartChildRequest): Promise<HostedChild> {
+  async start(
+    request: StartChildRequest,
+    _signal?: AbortSignal
+  ): Promise<HostedChild> {
     this.startRequests.push(request);
     const error = this.startErrors.get(request.taskId);
     if (error) {

@@ -501,6 +501,82 @@ void test("does not close a pane whose Herdr occupant changed", async () => {
   }
 });
 
+void test("closes a child only when terminal and generated session identities match", async () => {
+  const calls: string[] = [];
+  const sessionPath = "/tmp/2026-01-01_child.jsonl";
+  const server = await createFakeHerdrServer((request) => {
+    calls.push(request.method);
+    if (request.method === "agent.get") {
+      return {
+        agent: {
+          agent_session: { kind: "path", value: sessionPath },
+          pane_id: "w1:p2",
+          terminal_id: "expected",
+        },
+      };
+    }
+    return {};
+  });
+  const originalSocketPath = process.env.HERDR_SOCKET_PATH;
+  process.env.HERDR_SOCKET_PATH = server.path;
+  try {
+    await new HerdrChildHost().close({
+      agentName: "pi_task_1",
+      location: { paneId: "w1:p2", tabId: "w1:t2", workspaceId: "w1" },
+      sessionId: "child",
+      sessionPath,
+      taskId: taskIdFor(0),
+      terminalId: "expected",
+    });
+    assert.deepEqual(calls, ["agent.get", "pane.close"]);
+  } finally {
+    if (originalSocketPath === undefined) {
+      delete process.env.HERDR_SOCKET_PATH;
+    } else {
+      process.env.HERDR_SOCKET_PATH = originalSocketPath;
+    }
+    await server.close();
+  }
+});
+
+void test("does not adopt a replacement occupant discovered during startup cleanup", async () => {
+  const calls: string[] = [];
+  const replacementPath = "/tmp/2026-01-01_replacement.jsonl";
+  const server = await createFakeHerdrServer((request) => {
+    calls.push(request.method);
+    return {
+      agent: {
+        agent_session: { kind: "path", value: replacementPath },
+        pane_id: "w1:p2",
+        terminal_id: "replacement-terminal",
+      },
+    };
+  });
+  const originalSocketPath = process.env.HERDR_SOCKET_PATH;
+  process.env.HERDR_SOCKET_PATH = server.path;
+  try {
+    const host = new HerdrChildHost();
+    await assert.rejects(async () => {
+      await host.close({
+        agentName: "pi_task_1",
+        location: { paneId: "w1:p2", tabId: "w1:t2", workspaceId: "w1" },
+        sessionId: "expected-child",
+        sessionPath: replacementPath,
+        taskId: taskIdFor(0),
+        terminalId: "replacement-terminal",
+      });
+    });
+    assert.deepEqual(calls, ["agent.get"]);
+  } finally {
+    if (originalSocketPath === undefined) {
+      delete process.env.HERDR_SOCKET_PATH;
+    } else {
+      process.env.HERDR_SOCKET_PATH = originalSocketPath;
+    }
+    await server.close();
+  }
+});
+
 void test("runs four children concurrently, preserves request order, and closes successes", async () => {
   const host = new FakeChildHost();
   for (let index = 1; index <= 4; index += 1) {
@@ -977,16 +1053,24 @@ void test("does not prompt a child when the Parent is already aborted", async ()
   assert.equal(host.closed.length, 0);
 });
 
-void test("parent abort leaves a started child open", async () => {
+void test("parent abort closes a started child and preserves its session identity", async () => {
   const host = new FakeChildHost();
   host.sessionPaths.set(taskIdFor(0), "/tmp/one.jsonl");
   const promptEvents = new EventTarget();
-  const promptSettled = once(promptEvents, "settled");
-  const resolvePrompt = () => promptEvents.dispatchEvent(new Event("settled"));
+  const promptStarted = once(promptEvents, "started");
   let promptSignal: AbortSignal | undefined;
   host.prompt = async (_child, _prompt, signal) => {
     promptSignal = signal;
-    return await promptSettled.then(() => ({ status: "settled" }));
+    promptEvents.dispatchEvent(new Event("started"));
+    return await new Promise<ChildSettlement>((_resolve, reject) => {
+      signal?.addEventListener(
+        "abort",
+        () => {
+          reject(new Error("prompt wait aborted"));
+        },
+        { once: true }
+      );
+    });
   };
   const controller = new AbortController();
   const pending = new ConcurrentBatchRunner(host, new Reader()).run(
@@ -995,11 +1079,189 @@ void test("parent abort leaves a started child open", async () => {
     { availableModels: [], config: { defaults: {}, roles: {} } },
     { signal: controller.signal }
   );
-  await delay(0);
+  await promptStarted;
   controller.abort();
   const result = await pending;
-  resolvePrompt();
+
   assert.equal(result.results[0].status, "parent_aborted");
-  assert.equal(promptSignal?.aborted, false);
+  assert.equal(result.results[0].paneClosed, true);
+  assert.ok(result.results[0].sessionId !== undefined);
+  assert.equal(result.results[0].sessionPath, "/tmp/one.jsonl");
+  assert.equal(promptSignal?.aborted, true);
+  assert.deepEqual(
+    host.closed.map((child) => child.taskId),
+    ["task-1"]
+  );
+});
+
+void test("parent abort leaves a started child open when verified close fails", async () => {
+  const host = new FakeChildHost();
+  host.sessionPaths.set(taskIdFor(0), "/tmp/one.jsonl");
+  host.closeErrors.set(taskIdFor(0), new Error("occupant changed"));
+  const promptEvents = new EventTarget();
+  const promptStarted = once(promptEvents, "started");
+  host.prompt = async (_child, _prompt, signal) => {
+    promptEvents.dispatchEvent(new Event("started"));
+    return await new Promise<ChildSettlement>((_resolve, reject) => {
+      signal?.addEventListener(
+        "abort",
+        () => {
+          reject(new Error("prompt wait aborted"));
+        },
+        { once: true }
+      );
+    });
+  };
+  const controller = new AbortController();
+  const pending = new ConcurrentBatchRunner(host, new Reader()).run(
+    { tasks: [{ prompt: "one" }] },
+    parentContext,
+    { availableModels: [], config: { defaults: {}, roles: {} } },
+    { signal: controller.signal }
+  );
+  await promptStarted;
+  controller.abort();
+  const result = await pending;
+
+  assert.equal(result.results[0].status, "parent_aborted");
+  assert.equal(result.results[0].paneClosed, false);
+  assert.equal(result.results[0].sessionPath, "/tmp/one.jsonl");
   assert.equal(host.closed.length, 0);
+});
+
+void test("parent abort closes a verified child identified during startup", async () => {
+  const host = new FakeChildHost();
+  const startEvents = new EventTarget();
+  const startEntered = once(startEvents, "entered");
+  host.start = async (request, signal) => {
+    startEvents.dispatchEvent(new Event("entered"));
+    if (!signal) {
+      throw new Error("missing Parent signal");
+    }
+    await once(signal, "abort");
+    throw new StartChildError("startup aborted", {
+      agentName: "pi_task_1",
+      location: { paneId: "w1:p2", tabId: "w1:t2", workspaceId: "w1" },
+      sessionId: request.sessionId,
+      sessionPath: "/tmp/one.jsonl",
+      taskId: request.taskId,
+      terminalId: "term-task-1",
+    });
+  };
+  const controller = new AbortController();
+  const pending = new ConcurrentBatchRunner(host, new Reader()).run(
+    { tasks: [{ prompt: "one" }] },
+    parentContext,
+    { availableModels: [], config: { defaults: {}, roles: {} } },
+    { signal: controller.signal }
+  );
+  await startEntered;
+  controller.abort();
+  const result = await pending;
+
+  assert.equal(result.results[0].status, "parent_aborted");
+  assert.equal(result.results[0].paneClosed, true);
+  assert.ok(result.results[0].sessionId !== undefined);
+  assert.equal(result.results[0].sessionPath, "/tmp/one.jsonl");
+  assert.deepEqual(
+    host.closed.map((child) => child.taskId),
+    ["task-1"]
+  );
+});
+
+void test("parent abort also closes a child that blocked before a sibling", async () => {
+  const host = new FakeChildHost();
+  host.sessionPaths.set(taskIdFor(0), "/tmp/one.jsonl");
+  host.sessionPaths.set(taskIdFor(1), "/tmp/two.jsonl");
+  host.settlements.set(taskIdFor(0), { status: "blocked" });
+  const promptEvents = new EventTarget();
+  const secondPromptStarted = once(promptEvents, "second-started");
+  const prompt = host.prompt.bind(host);
+  host.prompt = async (child, taskPrompt, signal) => {
+    if (child.taskId === "task-1") {
+      return await prompt(child, taskPrompt, signal);
+    }
+    promptEvents.dispatchEvent(new Event("second-started"));
+    return await new Promise<ChildSettlement>((_resolve, reject) => {
+      signal?.addEventListener(
+        "abort",
+        () => {
+          reject(new Error("prompt wait aborted"));
+        },
+        { once: true }
+      );
+    });
+  };
+  const controller = new AbortController();
+  const pending = new ConcurrentBatchRunner(host, new Reader()).run(
+    { tasks: [{ prompt: "one" }, { prompt: "two" }] },
+    parentContext,
+    { availableModels: [], config: { defaults: {}, roles: {} } },
+    { signal: controller.signal }
+  );
+  await secondPromptStarted;
+  await flushMicrotasks();
+  controller.abort();
+  const result = await pending;
+
+  assert.deepEqual(
+    result.results.map((child) => child.status),
+    ["blocked", "parent_aborted"]
+  );
+  assert.deepEqual(
+    result.results.map((child) => child.paneClosed),
+    [true, true]
+  );
+  assert.match(result.results[0].error?.message ?? "", /pane closed/u);
+  assert.deepEqual(
+    new Set(host.closed.map((child) => child.taskId)),
+    new Set(["task-1", "task-2"])
+  );
+});
+
+void test("parent abort attempts to close every concurrently started child", async () => {
+  const host = new FakeChildHost();
+  host.sessionPaths.set(taskIdFor(0), "/tmp/one.jsonl");
+  host.sessionPaths.set(taskIdFor(1), "/tmp/two.jsonl");
+  const promptEvents = new EventTarget();
+  const allPrompted = once(promptEvents, "all-started");
+  let promptCount = 0;
+  host.prompt = async (_child, _prompt, signal) => {
+    promptCount += 1;
+    if (promptCount === 2) {
+      promptEvents.dispatchEvent(new Event("all-started"));
+    }
+    return await new Promise<ChildSettlement>((_resolve, reject) => {
+      signal?.addEventListener(
+        "abort",
+        () => {
+          reject(new Error("prompt wait aborted"));
+        },
+        { once: true }
+      );
+    });
+  };
+  const controller = new AbortController();
+  const pending = new ConcurrentBatchRunner(host, new Reader()).run(
+    { tasks: [{ prompt: "one" }, { prompt: "two" }] },
+    parentContext,
+    { availableModels: [], config: { defaults: {}, roles: {} } },
+    { signal: controller.signal }
+  );
+  await allPrompted;
+  controller.abort();
+  const result = await pending;
+
+  assert.deepEqual(
+    result.results.map((child) => child.status),
+    ["parent_aborted", "parent_aborted"]
+  );
+  assert.deepEqual(
+    result.results.map((child) => child.paneClosed),
+    [true, true]
+  );
+  assert.deepEqual(
+    new Set(host.closed.map((child) => child.taskId)),
+    new Set(["task-1", "task-2"])
+  );
 });
