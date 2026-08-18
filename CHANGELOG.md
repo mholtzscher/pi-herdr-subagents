@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.5.1](https://github.com/mholtzscher/pi-herdr-subagents/compare/v1.5.0...v1.5.1) (2026-08-18)
+
+
+### Bug Fixes
+
+* bound child runtime ([49a5725](https://github.com/mholtzscher/pi-herdr-subagents/commit/49a57252fe6cc527cae9876fa521f06b5284691d))
+* bound child runtime ([eb83a6e](https://github.com/mholtzscher/pi-herdr-subagents/commit/eb83a6e16249921df15b4e874559040c541efc9f))
+* clarify spawn_pi blocking semantics ([08ae2c5](https://github.com/mholtzscher/pi-herdr-subagents/commit/08ae2c5704561ab205d6f8d8f037900cdea229f5))
+* clarify spawn_pi blocking semantics ([cd50650](https://github.com/mholtzscher/pi-herdr-subagents/commit/cd506505e4d4247acf5505d8ee56a82b37227054))
+* close child panes when parent aborts ([98cc7de](https://github.com/mholtzscher/pi-herdr-subagents/commit/98cc7deb837ce087544d382f04dfb77fb21df8b7))
+* close child panes when parent aborts ([6c25ab6](https://github.com/mholtzscher/pi-herdr-subagents/commit/6c25ab68985a7e68eaccbfbf65b189297ff1361c))
+* **orchestrator:** focus child result verification ([7cbee16](https://github.com/mholtzscher/pi-herdr-subagents/commit/7cbee1663a6cd6a6ceea508ef052da8b206170d6))
+* **orchestrator:** focus child result verification ([11f6e8f](https://github.com/mholtzscher/pi-herdr-subagents/commit/11f6e8f70a6dd27db7dcdb5cae58fb1f400db194))
+* return child summaries to parent ([018a928](https://github.com/mholtzscher/pi-herdr-subagents/commit/018a928df11b65d114566ccd3de72b6c4bca6963))
+* return child summaries to parent ([942a714](https://github.com/mholtzscher/pi-herdr-subagents/commit/942a714bca9c1dc32a7f4cfddaf10b6fc19275a2))
+
 ## [1.5.0](https://github.com/mholtzscher/pi-herdr-subagents/compare/v1.4.0...v1.5.0) (2026-08-17)
 
 
