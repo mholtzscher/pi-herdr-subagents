@@ -34,14 +34,17 @@ interface Rendered {
 }
 
 interface ToolCandidate {
+  description?: unknown;
   execute?: unknown;
   parameters?: unknown;
   promptGuidelines?: unknown;
+  promptSnippet?: unknown;
   renderCall?: unknown;
   renderResult?: unknown;
 }
 
 interface CapturedTool {
+  description: string;
   execute: (
     callId: string,
     params: { tasks: SpawnTask[] },
@@ -65,6 +68,7 @@ interface CapturedTool {
     };
   };
   promptGuidelines: string[];
+  promptSnippet: string;
   renderCall: (args: { tasks?: SpawnTask[] }, theme: TestTheme) => Rendered;
   renderResult: (
     result: {
@@ -78,6 +82,8 @@ interface CapturedTool {
 }
 
 const isCapturedTool = (value: ToolCandidate): value is CapturedTool =>
+  "description" in value &&
+  typeof value.description === "string" &&
   "execute" in value &&
   typeof value.execute === "function" &&
   "parameters" in value &&
@@ -85,6 +91,8 @@ const isCapturedTool = (value: ToolCandidate): value is CapturedTool =>
   value.parameters !== null &&
   "promptGuidelines" in value &&
   Array.isArray(value.promptGuidelines) &&
+  "promptSnippet" in value &&
+  typeof value.promptSnippet === "string" &&
   "renderCall" in value &&
   typeof value.renderCall === "function" &&
   "renderResult" in value &&
@@ -126,6 +134,24 @@ void test("omits placement from the public task schema", () => {
   assert.equal(
     "placement" in SpawnPiSchema.properties.tasks.items.properties,
     false
+  );
+});
+
+void test("describes the blocking delegation contract", () => {
+  const tool = registeredTool();
+
+  assert.match(
+    tool.description,
+    /blocks the Parent until all children settle/u
+  );
+  assert.equal(
+    tool.promptSnippet,
+    "Run bounded child tasks in fresh visible Pi sessions"
+  );
+  assert.ok(
+    tool.promptGuidelines.includes(
+      "Children created by spawn_pi share the current checkout, may interfere with concurrent edits, and cannot invoke spawn_pi."
+    )
   );
 });
 

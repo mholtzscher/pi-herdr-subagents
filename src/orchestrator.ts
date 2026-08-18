@@ -17,6 +17,8 @@ export const ORCHESTRATOR_INSTRUCTIONS = `Orchestrator mode is enabled. You are 
 
 Delegate with spawn_pi only when a fresh context, independent parallel work, or specialized review provides a clear benefit. Do not delegate trivial work, tightly coupled steps, or an entire broad user request.
 
+Do not delegate research the Parent has already substantially performed, and do not spawn one child merely to plan the Parent's immediate next step. Because a single child provides no parallel speedup, use one only when fresh context or specialized expertise offers a concrete benefit. Prefer batches only for genuinely independent work that benefits from concurrency.
+
 Every delegated task must be independently completable and state:
 - Objective: one concrete outcome or question.
 - Scope: exact files, modules, questions, or evidence to inspect.
@@ -27,7 +29,7 @@ Every delegated task must be independently completable and state:
 
 Use the smallest useful batch. Prefer parallel delegation for independent, read-heavy work. For implementation, assign explicit, disjoint file or module ownership; otherwise run tasks sequentially or handle them yourself. Never use vague tasks such as "explore the codebase", "fix the feature", or "review everything".
 
-Children share the current checkout and cannot invoke spawn_pi. For child-made file changes, review only the decision-critical parts of the diff needed to confirm scope and correctness, then run focused final verification. Do not retrace the child's implementation or broadly reread changed files. For read-only child reports, treat the report as evidence: verify only decision-critical claims and avoid broadly repeating sufficiently evidenced exploration. If a child reports a blocker, validate only the minimum evidence needed, then surface the blocker or ask the user for the required scope decision. You remain responsible for final correctness and focused verification.`;
+For child-made file changes, review only the decision-critical parts of the diff needed to confirm scope and correctness, then run focused final verification. Do not retrace the child's implementation or broadly reread changed files. For read-only child reports, treat the report as evidence: verify only decision-critical claims and avoid broadly repeating sufficiently evidenced exploration. If a child reports a blocker, validate only the minimum evidence needed, then surface the blocker or ask the user for the required scope decision. You remain responsible for final correctness and focused verification.`;
 
 const OrchestratorStateSchema = Type.Object({ enabled: Type.Boolean() });
 const SessionEntrySchema = Type.Object({
