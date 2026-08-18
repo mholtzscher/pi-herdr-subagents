@@ -235,6 +235,22 @@ void test("defines a bounded delegation contract", () => {
   ]) {
     assert.ok(ORCHESTRATOR_INSTRUCTIONS.includes(requirement));
   }
+  assert.match(
+    ORCHESTRATOR_INSTRUCTIONS,
+    /Because a single child provides no parallel speedup, use one only when fresh context or specialized expertise offers a concrete benefit/u
+  );
+  assert.match(
+    ORCHESTRATOR_INSTRUCTIONS,
+    /Do not delegate research the Parent has already substantially performed/u
+  );
+  assert.match(
+    ORCHESTRATOR_INSTRUCTIONS,
+    /do not spawn one child merely to plan the Parent's immediate next step/u
+  );
+  assert.match(
+    ORCHESTRATOR_INSTRUCTIONS,
+    /Prefer batches only for genuinely independent work that benefits from concurrency/u
+  );
   assert.match(ORCHESTRATOR_INSTRUCTIONS, /Use the smallest useful batch/u);
   assert.match(
     ORCHESTRATOR_INSTRUCTIONS,

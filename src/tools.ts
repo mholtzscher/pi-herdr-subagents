@@ -458,7 +458,7 @@ export const registerSpawnPiTool = (
     : undefined;
   pi.registerTool<typeof SpawnPiSchema, SpawnPiDisplayDetails>({
     description:
-      "Run 1–8 independent bounded tasks concurrently in fresh visible Pi sessions hosted by Herdr. Children share the current checkout and cannot invoke spawn_pi.",
+      "Run bounded tasks concurrently in fresh visible Pi sessions hosted by Herdr. This call blocks the Parent until all children settle.",
     async execute(_toolCallId, params, signal, onUpdate, ctx) {
       if (!configResult.ok) {
         throw new Error(
@@ -503,13 +503,12 @@ export const registerSpawnPiTool = (
     name: "spawn_pi",
     parameters: SpawnPiSchema,
     promptGuidelines: [
-      "Use spawn_pi only for 1–8 independent tasks; children share the checkout and may interfere with concurrent edits.",
+      "Children created by spawn_pi share the current checkout, may interfere with concurrent edits, and cannot invoke spawn_pi.",
       "Set task.role only to an exact name listed under Configured Child Roles; otherwise omit role.",
       "Omit task.thinking by default so configured or inherited reasoning effort applies. Override it only when the user requests a level or the task cannot succeed without a different level.",
       ...(guidance !== undefined && guidance.length > 0 ? [guidance] : []),
     ],
-    promptSnippet:
-      "Offload independent repository exploration or bounded work to fresh visible Pi sessions",
+    promptSnippet: "Run bounded child tasks in fresh visible Pi sessions",
     renderCall(args, theme) {
       const tasks = requestedTasks(args);
       const count = tasks?.length;
