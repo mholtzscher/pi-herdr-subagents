@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { once } from "node:events";
 
 import { childPrompt, taskIdFor, validateSpawnBatchRequest } from "./domain.js";
 import type {
@@ -11,8 +10,12 @@ import type {
   SpawnBatchResult,
 } from "./domain.js";
 import { StartChildError } from "./herdr/host.js";
-import type { ChildHost, ChildSettlement } from "./herdr/host.js";
-import { emptyChildRolesConfig, resolveChildRuntime } from "./model-routing.js";
+import type { ChildHost, ChildSettlement, HostedChild } from "./herdr/host.js";
+import {
+  DEFAULT_TIMEOUT_SECONDS,
+  emptyChildRolesConfig,
+  resolveChildRuntime,
+} from "./model-routing.js";
 import type { ModelRoutingContext } from "./model-routing.js";
 import type { ChildResultReader } from "./results.js";
 
@@ -22,6 +25,11 @@ const DEFAULT_ROUTING: ModelRoutingContext = {
 };
 const messageOf = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
+
+const VERIFIED_CLOSE_TIMEOUT_MS = 5000;
+
+const runtimeTimeout = (routing: ModelRoutingContext): number | false =>
+  routing.config.defaults.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS;
 
 const visibleSelection = (
   selection: ChildRuntimeSelection
@@ -43,37 +51,130 @@ const fieldsForStartError = (
   };
 };
 
-const raceAbort = async (
-  promise: Promise<ChildSettlement>,
-  signal?: AbortSignal
-): Promise<ChildSettlement | undefined> => {
-  if (!signal) {
-    return await promise;
-  }
-  if (signal.aborted) {
-    return undefined;
-  }
-  const cleanup = new AbortController();
-  const abortPromise = (async (): Promise<undefined> => {
-    await once(signal, "abort", { signal: cleanup.signal });
-    return undefined;
-  })();
+type PromptOutcome =
+  | { kind: "settled"; settlement: ChildSettlement }
+  | { kind: "error"; error: unknown }
+  | { kind: "parent_aborted" }
+  | { kind: "timed_out"; elapsedMs: number };
+
+const settledPrompt = async (
+  prompt: () => Promise<ChildSettlement>
+): Promise<PromptOutcome> => {
   try {
-    const result = await Promise.race([promise, abortPromise]);
-    return result;
-  } finally {
-    cleanup.abort();
+    return { kind: "settled", settlement: await prompt() };
+  } catch (error) {
+    return { error, kind: "error" };
   }
 };
 
-const settlePrompt = async (
-  promise: Promise<ChildSettlement | undefined>
-): Promise<ChildSettlement | undefined | { error: unknown }> => {
+const waitForPrompt = async (
+  prompt: () => Promise<ChildSettlement>,
+  timeoutSeconds: number | false,
+  timeoutController: AbortController,
+  startedAt: number,
+  signal?: AbortSignal
+): Promise<PromptOutcome> =>
+  // oxlint-disable-next-line promise/avoid-new, promise/no-multiple-resolved -- A guarded resolver coordinates three competing outcomes.
+  await new Promise<PromptOutcome>((resolve) => {
+    let finished = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const cleanup = new AbortController();
+    const finish = (outcome: PromptOutcome) => {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
+      cleanup.abort();
+      // oxlint-disable-next-line promise/no-multiple-resolved -- The finished guard permits only the winning outcome.
+      resolve(outcome);
+    };
+
+    if (signal?.aborted === true) {
+      finish({ kind: "parent_aborted" });
+      return;
+    }
+    signal?.addEventListener(
+      "abort",
+      () => {
+        finish({ kind: "parent_aborted" });
+      },
+      { once: true, signal: cleanup.signal }
+    );
+    if (timeoutSeconds !== false) {
+      const delayMs = Math.max(
+        0,
+        timeoutSeconds * 1000 - (Date.now() - startedAt)
+      );
+      timer = setTimeout(() => {
+        const elapsedMs = Math.max(0, Date.now() - startedAt);
+        timeoutController.abort();
+        finish({ elapsedMs, kind: "timed_out" });
+      }, delayMs);
+    }
+    void settledPrompt(prompt).then(finish);
+  });
+
+const closeExpectedChild = async (
+  host: ChildHost,
+  child: HostedChild
+): Promise<boolean> => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    controller.abort();
+  }, VERIFIED_CLOSE_TIMEOUT_MS);
   try {
-    return await promise;
-  } catch (error) {
-    return { error };
+    await host.close(child, controller.signal);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
   }
+};
+
+const terminalPromptResult = async (
+  outcome: PromptOutcome,
+  base: Omit<ChildResult, "status" | "error">,
+  childFields: Pick<ChildResult, "location" | "sessionId" | "sessionPath">,
+  host: ChildHost,
+  child: HostedChild
+): Promise<
+  | { result: ChildResult }
+  | { outcome: Extract<PromptOutcome, { kind: "error" | "settled" }> }
+> => {
+  if (outcome.kind === "parent_aborted") {
+    return {
+      result: {
+        ...base,
+        ...childFields,
+        error: {
+          code: "parent_aborted",
+          message: "Parent stopped waiting; child remains open",
+        },
+        status: "parent_aborted",
+      },
+    };
+  }
+  if (outcome.kind !== "timed_out") {
+    return { outcome };
+  }
+  const paneClosed = await closeExpectedChild(host, child);
+  return {
+    result: {
+      ...base,
+      ...childFields,
+      elapsedMs: outcome.elapsedMs,
+      error: {
+        code: "timed_out",
+        message: "Child exceeded the global runtime timeout",
+      },
+      paneClosed,
+      status: "timed_out",
+    },
+  };
 };
 
 export interface BatchRunner {
@@ -190,6 +291,7 @@ export class ConcurrentBatchRunner implements BatchRunner {
         resolution.selection.thinkingLevel ?? context.thinkingLevel,
     };
     let child;
+    let startedAt = 0;
     try {
       child = await this.host.start(
         {
@@ -202,6 +304,7 @@ export class ConcurrentBatchRunner implements BatchRunner {
         },
         signal
       );
+      startedAt = Date.now();
     } catch (error) {
       const childFields = fieldsForStartError(error);
       const result: ChildResult = {
@@ -224,30 +327,42 @@ export class ConcurrentBatchRunner implements BatchRunner {
       sessionId: child.sessionId,
       sessionPath: child.sessionPath,
     };
-    const settlement = await settlePrompt(
-      raceAbort(this.host.prompt(child, childPrompt(taskId, task)), signal)
+    const timeoutController = new AbortController();
+    const promptOutcome = await waitForPrompt(
+      async () =>
+        await this.host.prompt(
+          child,
+          childPrompt(taskId, task),
+          timeoutController.signal
+        ),
+      runtimeTimeout(routing),
+      timeoutController,
+      startedAt,
+      signal
     );
-    if (!settlement) {
-      const result: ChildResult = {
+    const terminal = await terminalPromptResult(
+      promptOutcome,
+      base,
+      childFields,
+      this.host,
+      child
+    );
+    if ("result" in terminal) {
+      return terminal.result;
+    }
+    const activeOutcome = terminal.outcome;
+    if (activeOutcome.kind === "error") {
+      return {
         ...base,
         ...childFields,
         error: {
-          code: "parent_aborted",
-          message: "Parent stopped waiting; child remains open",
+          code: "prompt_failed",
+          message: messageOf(activeOutcome.error),
         },
-        status: "parent_aborted",
-      };
-      return result;
-    }
-    if ("error" in settlement) {
-      const result: ChildResult = {
-        ...base,
-        ...childFields,
-        error: { code: "prompt_failed", message: messageOf(settlement.error) },
         status: "failed",
       };
-      return result;
     }
+    const { settlement } = activeOutcome;
     if (settlement.status === "blocked") {
       const result: ChildResult = {
         ...base,

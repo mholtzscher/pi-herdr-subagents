@@ -34,7 +34,8 @@ export type ChildStatus =
   | "failed"
   | "blocked"
   | "unattributable"
-  | "parent_aborted";
+  | "parent_aborted"
+  | "timed_out";
 
 export interface ChildLocation {
   workspaceId: string;
@@ -60,6 +61,7 @@ export interface ChildResult {
   sessionPath?: string;
   location?: ChildLocation;
   paneClosed: boolean;
+  elapsedMs?: number;
   role?: string;
   selection?: Omit<ChildRuntimeSelection, "rolePrompt">;
   error?: {
@@ -70,7 +72,8 @@ export interface ChildResult {
       | "prompt_failed"
       | "result_unreadable"
       | "blocked"
-      | "parent_aborted";
+      | "parent_aborted"
+      | "timed_out";
     message: string;
   };
 }

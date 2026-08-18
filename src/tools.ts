@@ -137,6 +137,9 @@ const shortReason = (result: ChildResult): string | undefined => {
   if (result.status === "parent_aborted") {
     return "parent stopped waiting";
   }
+  if (result.status === "timed_out") {
+    return "runtime timed out";
+  }
   if (result.status !== "failed") {
     return undefined;
   }
@@ -158,6 +161,9 @@ const shortReason = (result: ChildResult): string | undefined => {
     }
     case "parent_aborted": {
       return "parent stopped waiting";
+    }
+    case "timed_out": {
+      return "runtime timed out";
     }
     case "blocked":
     case undefined: {

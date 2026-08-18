@@ -84,6 +84,7 @@ const ChildErrorSchema = Type.Object(
       Type.Literal("result_unreadable"),
       Type.Literal("blocked"),
       Type.Literal("parent_aborted"),
+      Type.Literal("timed_out"),
     ]),
     message: Type.String(),
   },
@@ -129,6 +130,7 @@ const ChildSelectionSchema = Type.Object(
 );
 const ChildResultSchema = Type.Object(
   {
+    elapsedMs: Type.Optional(Type.Number({ minimum: 0 })),
     error: Type.Optional(ChildErrorSchema),
     location: Type.Optional(ChildLocationSchema),
     paneClosed: Type.Boolean(),
@@ -143,6 +145,7 @@ const ChildResultSchema = Type.Object(
       Type.Literal("blocked"),
       Type.Literal("unattributable"),
       Type.Literal("parent_aborted"),
+      Type.Literal("timed_out"),
     ]),
     summary: Type.Optional(Type.String()),
     taskId: Type.String({ pattern: "^task-[0-9]+$" }),
@@ -322,6 +325,9 @@ const fallbackStatus = (child: ChildResult): ChildCostStatus => {
   }
   if (child.status === "blocked") {
     return "blocked";
+  }
+  if (child.status === "timed_out" && child.paneClosed) {
+    return "complete";
   }
   return "open";
 };

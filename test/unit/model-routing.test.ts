@@ -55,7 +55,11 @@ void test("loads global config and role catalogue independently", () => {
   const rolesPath = pathModule.join(directory, "custom.config", "roles");
   try {
     assert.deepEqual(loadChildRolesConfig(path), {
-      config: { defaults: {}, orchestrator: { enabled: false }, roles: {} },
+      config: {
+        defaults: { timeoutSeconds: 600 },
+        orchestrator: { enabled: false },
+        roles: {},
+      },
       ok: true,
       path,
     });
@@ -251,6 +255,50 @@ void test("loads and validates global child placement", () => {
       assert.match(
         errorOf(loadChildRolesConfig(path)),
         /defaults\.placement must be tab or split/u
+      );
+    }
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+void test("loads the global child runtime timeout default, false, and valid bounds", () => {
+  const directory = mkdtempSync(pathModule.join(tmpdir(), "child-roles-"));
+  const path = pathModule.join(directory, "herdr-subagents.json");
+  try {
+    for (const [configured, expected] of [
+      [undefined, 600],
+      [false, false],
+      [1, 1],
+      [2_147_483, 2_147_483],
+    ] as const) {
+      writeFileSync(
+        path,
+        JSON.stringify({
+          defaults:
+            configured === undefined ? {} : { timeoutSeconds: configured },
+        })
+      );
+      const loaded = loadChildRolesConfig(path);
+      assert.equal(loaded.ok, true);
+      if (loaded.ok) {
+        assert.equal(loaded.config.defaults.timeoutSeconds, expected);
+      }
+    }
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
+void test("rejects invalid global child runtime timeouts", () => {
+  const directory = mkdtempSync(pathModule.join(tmpdir(), "child-roles-"));
+  const path = pathModule.join(directory, "herdr-subagents.json");
+  try {
+    for (const timeoutSeconds of [true, null, 0, -1, 1.5, 2_147_484, "600"]) {
+      writeFileSync(path, JSON.stringify({ defaults: { timeoutSeconds } }));
+      assert.match(
+        errorOf(loadChildRolesConfig(path)),
+        /defaults\.timeoutSeconds must be false or a positive integer/u
       );
     }
   } finally {

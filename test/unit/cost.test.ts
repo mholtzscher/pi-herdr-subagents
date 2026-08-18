@@ -149,6 +149,32 @@ void test("discovers wrapped and legacy batches in request order with identity d
   );
 });
 
+void test("parses persisted timed-out results with elapsed time", () => {
+  const timedOut = child({
+    elapsedMs: 1000,
+    error: {
+      code: "timed_out",
+      message: "Child exceeded the global runtime timeout",
+    },
+    paneClosed: true,
+    sessionId: "timed-out-session",
+    status: "timed_out",
+  });
+  const entries = [
+    entry({
+      message: {
+        details: { requested: 1, results: [timedOut] },
+        isError: false,
+        role: "toolResult",
+        toolName: "spawn_pi",
+      },
+      type: "message",
+    }),
+  ];
+
+  assert.deepEqual(discoverSpawnedChildren(entries), [timedOut]);
+});
+
 void test("reads each child once, tolerates malformed trailing lines, and falls back on lookup failures", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "pi-herdr-cost-"));
   const firstPath = path.join(directory, "first.jsonl");
@@ -200,6 +226,44 @@ void test("reads each child once, tolerates malformed trailing lines, and falls 
       ["complete", "open"]
     );
     assert.equal(snapshot.childrenCost, 3.75);
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
+});
+
+void test("does not report a closed timed-out child as open on cost fallback", async () => {
+  const directory = await mkdtemp(
+    path.join(tmpdir(), "pi-herdr-cost-timeout-")
+  );
+  const sessionPath = path.join(directory, "timed-out.jsonl");
+  try {
+    await writeFile(sessionPath, session("timed-out", 1.5));
+    const timedOut = child({
+      elapsedMs: 1000,
+      error: { code: "timed_out", message: "runtime timed out" },
+      paneClosed: true,
+      sessionId: "timed-out",
+      sessionPath,
+      status: "timed_out",
+    });
+    const parentEntries = [
+      entry({
+        message: {
+          details: { requested: 1, results: [timedOut] },
+          isError: false,
+          role: "toolResult",
+          toolName: "spawn_pi",
+        },
+        type: "message",
+      }),
+    ];
+    const snapshot = await readOrchestratorCost(parentEntries, async () => {
+      await Promise.resolve();
+      throw new Error("closed pane unavailable");
+    });
+
+    assert.equal(snapshot.children[0]?.status, "complete");
+    assert.equal(snapshot.children[0]?.cost, 1.5);
   } finally {
     await rm(directory, { force: true, recursive: true });
   }

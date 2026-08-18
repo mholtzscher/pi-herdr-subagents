@@ -280,6 +280,28 @@ void test("renders collapsed and expanded final rows with the approved visibilit
   assert.match(expanded, /Please choose/u);
 });
 
+void test("renders a distinct timed-out reason", () => {
+  const tool = registeredTool();
+  const timedOut = child({
+    elapsedMs: 1000,
+    error: {
+      code: "timed_out",
+      message: "Child exceeded the global runtime timeout",
+    },
+    paneClosed: true,
+    status: "timed_out",
+  });
+  const output = render(
+    tool,
+    { phase: "finished", result: { requested: 1, results: [timedOut] } },
+    { tasks: [{ prompt: "one" }] },
+    true
+  );
+
+  assert.match(output, /× task-1 incomplete · runtime timed out/u);
+  assert.match(output, /Child exceeded the global runtime timeout/u);
+});
+
 void test("renders successful batches with aggregate completion and icon-only child rows", () => {
   const tool = registeredTool();
   const result = {
